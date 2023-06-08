@@ -1,0 +1,21 @@
+-X=*_generators/gen_rows_enum.cpp^
+-X=*/kbd_layout_gen.cpp
+-X=*_generators/main.c
+-X=*/TestWinDrawContextCommon/BmpView.cpp
+-X=*.h^
+-X=*/src/encoding/tests/*
+-X=*/src/TestsWinGui/BmpView.cpp
+
+#--verbose=extra
+--verbose=normal
+
+--entry-name=_tWinMain
+--scan=.
+--filename-width=40
+--text-width=140
+--main
+#--remove-path
+
+# --verbose=normal
+# --verbose=config
+# --scan=..\..

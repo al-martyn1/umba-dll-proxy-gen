@@ -1,0 +1,11 @@
+--includes=false
+--overwrite=Y
+--base-indent=0
+--indent-increment=4
+
+--namespace-style=CppStyle
+--enum-name-style=PascalStyle
+--enum-values-style=CamelStyle
+--enum-serialize-style=All
+
+--override-template-parameter=EnumNameFormat:E$(ENAMNAME)

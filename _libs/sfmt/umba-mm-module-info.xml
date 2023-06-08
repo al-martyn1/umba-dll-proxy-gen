@@ -1,0 +1,15 @@
+<umba-mm-module-info>
+
+    <options>
+      <options-list type="cpp_includes">./inc</options-list>
+    </options>
+
+    <file>
+      <file-path>inc/umba/simple_formatter.h</file-path>
+    </file>
+
+    <file>
+      <file-path>inc/umba/umba_lout.cpp</file-path>
+    </file>
+
+</umba-mm-module-info>
