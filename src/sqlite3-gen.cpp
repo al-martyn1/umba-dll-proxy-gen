@@ -4,6 +4,14 @@
 
 #include "umba/umba.h"
 //
+#include "GenerationOptions.h"
+#include "FunctionPrototypeGeneration.h"
+#include "FunctionPrototypeTypes.h"
+#include "FunctionPrototypeParsing.h"
+#include "StringAppendWithSep.h"
+#include "InputData.h"
+#include "utils.h"
+
 #include "umba/filesys.h"
 #include "umba/string_plus.h"
 #include "umba/macros.h"
@@ -34,693 +42,134 @@
 #include <stdexcept>
 
 
-struct IsSpace
-{
-    bool operator()(char ch) const
-    {
-        return ch==' ' || ch=='\t' || ch=='\r' || ch=='\n';
-    }
-};
+// DLL export forwarding
+// https://devblogs.microsoft.com/oldnewthing/20121116-00/?p=6073
 
-inline
-std::string trim(const std::string &str)
-{
-    return marty_cpp::simple_trim(str, IsSpace());
-}
+// Генерация def файла. Имя текущей DLL - задаём константой
 
-inline
-std::string appendWithSep(std::string str, const std::string &sAppend, const std::string &sSep = " ")
-{
-    if (sAppend.empty()) // Do nothing on empty append
-        return str;
+// Имя FORWARD DLL - задаём константой
 
-    if (str.empty())
-    {
-        str.append(sAppend);
-    }
-    else
-    {
-        str.append(sSep);
-        str.append(sAppend);
-    }
-
-    return str;
-}
-
-class StringAppendWithSep
-{
-    std::string  strSep;
-    std::string  strBuf;
-
-public:
-
-    StringAppendWithSep(const std::string &sep="", const std::string &strOrg=std::string())
-    : strSep(sep)
-    , strBuf(strOrg)
-    {}
-
-    std::string modifySep(std::string newSep)
-    {
-        std::swap(strSep, newSep);
-        return newSep;
-    }
-
-    StringAppendWithSep& append(const std::string &s)
-    {
-        strBuf = appendWithSep(strBuf, s, strSep);
-        return *this;
-    }
-
-    StringAppendWithSep& append(std::size_t n, char ch)
-    {
-        append(std::string(n, ch));
-        return *this;
-    }
-
-    StringAppendWithSep& append(char ch)
-    {
-        append(1, ch);
-        return *this;
-    }
-
-    StringAppendWithSep& concat(const std::string &s)
-    {
-        strBuf.append(s);
-        return *this;
-    }
-
-    StringAppendWithSep& concat(std::size_t n, char ch)
-    {
-        strBuf.append(n, ch);
-        return *this;
-    }
-
-    StringAppendWithSep& concat(char ch)
-    {
-        strBuf.append(1, ch);
-        return *this;
-    }
-
-    std::string toString() const
-    {
-        return strBuf;
-    }
-
-
-};
-
-
-struct IsPtrSign
-{
-    bool operator()(char ch) const
-    {
-        return ch=='*';
-    }
-};
-
-struct IsRefSign
-{
-    bool operator()(char ch) const
-    {
-        return ch=='*';
-    }
-};
-
-
-inline
-std::string normalizeTypeName( std::string str )
-{
-    std::string strRefPtr;
-
-    while(!str.empty())
-    {
-        if (str.back()=='*' || str.back()=='&')
-        {
-            strRefPtr.append(1, str.back());
-            str.erase(str.size()-1);
-        }
-        else if (str.back()==' ')
-        {
-            str.erase(str.size()-1);
-        }
-        else
-        {
-            break;
-        }
-    }
-
-    std::reverse(strRefPtr.begin(), strRefPtr.end());
-
-    return str + strRefPtr;
-}
+// Создаём список имён, которые нужно отфорвардить (в def-файле), соответственно, код для них не генерируем
+// NAME FORWARD
+// NAME FORWARD:forwar_dll.dll
+// NAME DATA FORWARD
+// NAME DATA FORWARD:forwar_dll.dll
 
 
 
-const std::unordered_set<std::string>& getTypeModifiers()
-{
-    static
-    std::unordered_set<std::string> s; // = {"const", "unsigned", "signed", "long", "short"};
-    return s;
-}
 
-const std::unordered_map<std::string,std::string>& getInitialNames()
-{
-    static
-    std::unordered_map<std::string,std::string> m = 
-    { {"void**"                , "ppv"}
-    , {"void*"                 , "pv"}
-    , {"void"                  , ""}
-    , {"int"                   , "i"}
-    , {"const void*"           , "pcv"}
-    , {"double"                , "dbl"}
-    , {"char**"                , "ppStr"}
-    , {"const char*"           , "pcStr"}
-    , {"const unsigned char*"  , "pcBytes"}
-    , {"unsigned char*"        , "pBytes"}
-    , {"char***"               , "pppStr"}
-    , {"int*"                  , "pInt"}
-    , {"char*"                 , "pStr"}
-    , {"const char**"          , "ppcStr"}
-    , {"const void**"          , "ppcv"}
-    , {"char const**"          , "ppcStr"}
-    , {"char const*"           , "pcStr"}
-    , {"unsigned"              , "u"}
-    , {"unsigned int"          , "u"}
-    , {"va_list"               , "vaLst"}
-    , {"char"                  , "ch"}
-    , {"sqlite3_blob**"        , "ppBlob"}
-    , {"sqlite3_blob*"         , "pBlob"}
-    , {"sqlite3_context*"      , "pCtx"}
-    , {"sqlite3_stmt*"         , "pStmt"}
-    , {"sqlite_int64"          , "i64"}
-    , {"sqlite3_int64"         , "i64"}
-    , {"sqlite3_int64*"        , "pI64"}
-    , {"const sqlite3_value*"  , "pcVal"}
-    , {"sqlite3_mutex*"        , "pMutex"}
-    , {"sqlite_uint64"         , "u64"}
-    , {"sqlite3_uint64"        , "u64"}
-    , {"sqlite3_value**"       , "ppVal"}
-    , {"sqlite3*"              , "pDb"}
-    , {"sqlite3_value*"        , "pVal"}
-    , {"const sqlite3_module*" , "pcMod"}
-    , {"sqlite3_callback"      , "cbk"}
-    , {"sqlite3_str*"          , "pqStr"}
-    , {"..."                   , ""}
-    , {"sqlite3**"             , "ppDb"}
-    , {"sqlite3_stmt**"        , "ppStmt"}
-    , {"sqlite3_blob*"         , "pBlob"}
-    , {"sqlite3_vfs*"          , "pVfs"}
-    , {"sqlite3_backup*"       , "pBckp"}
-    , {"sqlite3_index_info*"   , "pIdxInfo"}
-    , {"sqlite3_file*"         , "pFile"}
-    , {"sqlite3_file"          , "file"}
-    , {"DWORD"                 , "dw"}
-    , {"LPCWSTR"               , "lpcwStr"}
-    , {"LPWSTR"                , "lpwStr"}
-    
-    //, {"", ""}
-    };
 
-    return m;
-}
 
-         
-         
-//           
-// std::unordered_set<std::string>& getKnownTypes()
+
+
+
+// struct IsPtrSign
 // {
-//     static
-//     std::unordered_set<std::string> s;
-//     return s;
-// }
-
-
-
-struct FunctionInfo;
-struct FunctionArgInfo;
-
-
-struct FunctionInfo
-{
-    std::string                     retType;
-    std::string                     ptrType;
-    std::string                     name   ;
-    std::vector<FunctionArgInfo>    args   ;
-
-    bool hasEllipsisArg() const;
-
-};
-
-struct FunctionArgInfo
-{
-    bool           simple = true;
-    std::string    simpleType   ;
-    FunctionInfo   fnPointerType;
-    std::string    name         ;
-
-    bool isEllipsisType() const
-    {
-        if (!simple)
-            return false;
-
-        return simpleType=="...";
-    }
-};
-
-inline
-bool FunctionInfo::hasEllipsisArg() const
-{
-    for(const auto &a: args)
-    {
-        if (a.isEllipsisType())
-            return true;
-    }
-
-    return false;
-}
-
-
-
-inline
-void clearArgNames(FunctionInfo &fi)
-{
-    for(auto &arg: fi.args)
-    {
-        arg.name.clear();
-    }
-}
-
-inline
-void generateArgNames(FunctionInfo &fi)
-{
-    const std::unordered_map<std::string,std::string>& initialNames = getInitialNames();
-
-    std::unordered_set<std::string>  usedNames;
-    for(auto &arg: fi.args)
-    {
-        if (!arg.name.empty())
-            continue;
-
-        std::string candi;
-        if (!arg.simple)
-        {
-            candi = "pfn";
-        }
-        else
-        {
-            if (arg.simpleType=="..." || arg.simpleType=="void")
-                continue;
-
-            std::unordered_map<std::string,std::string>::const_iterator it = initialNames.find(arg.simpleType);
-            if (it!=initialNames.end())
-                candi = it->second;
-            if (candi.empty())
-                candi = "arg";
-        }
-
-        std::string finalCandi = candi;
-        unsigned i = 1;
-        static const char *idxes = "0123456789ABCDEFGHIJKLMNOPQRSTUV";
-        while(true)
-        {
-            if (usedNames.find(finalCandi)==usedNames.end())
-            {
-                usedNames.insert(finalCandi);
-                arg.name = finalCandi;
-                break;
-            }
-            else
-            {
-                ++i;
-                if (i>16) // !!!
-                    break;
-                finalCandi = candi;
-                finalCandi.append(1, idxes[i]);
-            }
-        }
-    }
-}
-
-struct FnDefGenerateOptions
-{
-    std::string prototypePrefix; // EXPORT/IMPORT/etc
-
-    bool        overrideFnType = false;
-    std::string fnTypeOverride ; // WINAPI/stdcall/cdecl/etc
-
-}; // struct FnDefGenerateOptions
-
-inline
-std::string generateFunctionName( const std::string &name, std::string overrideNameTemplate
-                                , umba::macros::StringStringMap<std::string> macros=umba::macros::StringStringMap<std::string>()
-                                )
-{
-    //umba::macros::StringStringMap<std::string> m;
-
-    macros["FunctionName"] = name;
-
-    if (overrideNameTemplate.empty())
-    {
-        overrideNameTemplate = "$(FunctionName)";
-    }
-
-    return
-    umba::macros::substMacros( overrideNameTemplate
-                             , umba::macros::MacroTextFromMapRef<std::string>(macros)
-                             , umba::macros::smf_KeepUnknownVars | umba::macros::smf_DisableRecursion
-                             );
-}
-
-inline
-std::string generateFunctionName( const FunctionInfo &fi, std::string overrideNameTemplate
-                                , umba::macros::StringStringMap<std::string> macros=umba::macros::StringStringMap<std::string>()
-                                )
-{
-    return generateFunctionName(fi.name, overrideNameTemplate, macros);
-}
-
-inline
-std::string generateFunctionCall( FunctionInfo fi, std::string overrideNameTemplate, FnDefGenerateOptions fnDefGenerateOptions
-                                , umba::macros::StringStringMap<std::string> macros=umba::macros::StringStringMap<std::string>()
-                                )
-{
-    StringAppendWithSep argBuf = StringAppendWithSep(", ");
-    for(auto argInfo: fi.args)
-    {
-        argBuf.append(argInfo.name);
-    }
-
-    //StringAppendWithSep buf = StringAppendWithSep(" ");
-
-    // std::string name = fi.name;
-    // if (!overrideName.empty())
-    //     name = overrideName;
-
-    return generateFunctionName(fi.name, overrideNameTemplate, macros) + "(" + argBuf.toString() + ")";
-}
-
-inline
-std::string generateFunctionDef( FunctionInfo fi, bool ptrMode, std::string overrideNameTemplate, FnDefGenerateOptions fnDefGenerateOptions
-                                , umba::macros::StringStringMap<std::string> macros=umba::macros::StringStringMap<std::string>()
-                               )
-{
-    //std::string resStr;
-
-    StringAppendWithSep buf = StringAppendWithSep(" ");
-
-    // std::string name = fi.name;
-    // if (!overrideName.empty())
-    //     name = overrideName;
-
-    std::string fnType   = fi.ptrType;
-    if (fnDefGenerateOptions.overrideFnType)
-    {
-        fnType = fnDefGenerateOptions.fnTypeOverride;
-    }
-
-    if (ptrMode)
-    {
-        StringAppendWithSep ptrBuf = StringAppendWithSep(" ");
-        //resStr = fi.retType + std::string(" (") + fi.ptrType + std::string(" *") + name + std::string(")");
-        //buf.append(fi.retType).append("(").concat(fi.ptrType).append('*').concat(name).concat(')');
-
-        ptrBuf.append(fnType).append('*').concat(generateFunctionName(fi, overrideNameTemplate, macros));
-        buf.append(fi.retType).append("(").concat(ptrBuf.toString()).concat(')');
-    }
-    else
-    {
-        //resStr = fi.ptrType + std::string(" ") + fi.retType + std::string(" ") + name;
-        buf.append(fnDefGenerateOptions.prototypePrefix).append(fi.retType).append(fnType).append(generateFunctionName(fi, overrideNameTemplate, macros));
-    }
-
-    // parameters
-
-    buf.concat("(");
-    //std::string prevSep = buf.modifySep(",")
-
-    StringAppendWithSep argBuf = StringAppendWithSep(", ");
-
-    for(auto argInfo: fi.args)
-    {
-        std::string fullArg;
-        if (argInfo.simple)
-        {
-            fullArg = argInfo.simpleType;
-            if (!argInfo.name.empty())
-            {
-               fullArg.append(1, ' ');
-               fullArg.append(argInfo.name);
-            }
-        }
-        else // not simple
-        {
-           FunctionInfo argFi = argInfo.fnPointerType;
-           clearArgNames(argFi);
-           fullArg = generateFunctionDef( argFi, true, argInfo.name, fnDefGenerateOptions);
-        
-        }
-
-        argBuf.append(fullArg);
-    }
-
-    buf.concat(argBuf.toString());
-    buf.concat(')');
-
-    return buf.toString();
-
-}
-
-// struct FunctionInfo
-// {
-//     std::string                     retType;
-//     std::string                     ptrType;
-//     std::string                     name   ;
-//     std::vector<FunctionArgInfo>    args   ;
+//     bool operator()(char ch) const
+//     {
+//         return ch=='*';
+//     }
 // };
 //  
-// struct FunctionArgInfo
+// struct IsRefSign
 // {
-//     bool           simple = true;
-//     std::string    simpleType   ;
-//     FunctionInfo   fnPointerType;
-//     std::string    name         ;
+//     bool operator()(char ch) const
+//     {
+//         return ch=='*';
+//     }
 // };
 
 
-
-bool splitFunctionArgDef( std::string       def
-                        , FunctionArgInfo  &argInfo
-                        );
-
-bool splitFunctionPointerDef( std::string    def
-                            , FunctionInfo  &functionInfo
-                            )
-{
-    std::string::size_type 
-    pos = def.find('(');
-    if (pos==def.npos)
-        return false;
-
-    functionInfo.retType.assign(def, 0, pos);
-    functionInfo.retType = normalizeTypeName(functionInfo.retType);
-
-    def.erase(0, pos);
-    if (def.empty())
-        return false;
-
-    pos = def.find(')');
-    if (pos==def.npos)
-        return false;
-
-    std::string ptrTypeAndName = std::string(def, 0, pos+1);
-    def.erase(0, pos+1);
-    if (def.empty())
-        return false;
-    if (ptrTypeAndName.empty())
-        return false;
-    if (ptrTypeAndName.front()!='(' || ptrTypeAndName.back()!=')')
-        return false;
-
-    ptrTypeAndName.erase(ptrTypeAndName.size()-1);
-    ptrTypeAndName.erase(0, 1);
-    ptrTypeAndName = trim(ptrTypeAndName);
-    if (ptrTypeAndName.empty())
-        return false;
-
-    if (def.back()==';')
-        def.erase(def.size()-1);
-    def = trim(def);
-    if (def.empty())
-        return false;
-    if (def.front()!='(' || def.back()!=')')
-        return false;
-    def.erase(def.size()-1);
-    def.erase(0, 1);
-
-    pos = ptrTypeAndName.find('*');
-    if (pos==def.npos)
-        return false;
-
-    functionInfo.ptrType = trim(std::string(ptrTypeAndName, 0, pos));
-    functionInfo.name    = trim(std::string(ptrTypeAndName, pos+1));
-
-    static std::string braces = "(<[";
-    std::vector<std::string> argStrings;
-    umba::string_plus::ascii_brace::split_against_braces( argStrings  //!< [out] Выхлоп
-                                                        , def         //!< Входная строка
-                                                        , braces      //!< Обрабатываемые скобки
-                                                        , std::string(",")         //!< Разделитель
-                                                        , std::string("") // fileName    //!< Имя файла?
-                                                        , (size_t)-1  // lineNumber  //!< Номер строки
-                                                        , (size_t)-1  //  linePos    //!< Позиция в строке
-                                                        , false       // strictOrder //!< Строгий порядок?
-                                                        );
-
-    for(auto argStr: argStrings)
-    {
-        FunctionArgInfo argInfo;
-        if (!splitFunctionArgDef(argStr, argInfo))
-            return false;
-        functionInfo.args.emplace_back(argInfo);
-    }
-
-    return true;
-}
-
-
-inline
-std::string readType(std::string &def)
-{
-    // const std::unordered_set<std::string>& knownModifiers = getTypeModifiers();
-    // const std::unordered_set<std::string>& knownTypes     = getKnownTypes();
-
-    std::string::size_type 
-    pos = def.find_last_of("&*");
-
-    if (pos!=def.npos)
-    {
-        std::string typeStr = std::string(def, 0, pos+1);
-        def.erase(0, pos+1);
-        return typeStr;
-    }
-
-    std::string collectedModifiers;
-
-    //pos = def.find_first_of(' ');
-    pos = def.find(' ');
-
-    while(!def.empty() && pos!=def.npos)
-    {
-        std::string typeStr = trim(std::string(def, 0, pos));
-        def.erase(0, pos+1);
-        if (!collectedModifiers.empty())
-            collectedModifiers.append(1, ' ');
-        collectedModifiers.append(typeStr);
-        pos = def.find(' ');
-    }
-
-    if (!collectedModifiers.empty())
-        return collectedModifiers;
-
-    std::string res = def;
-    def.clear();
-
-    return res;
-}
-
-
-inline
-bool splitFunctionArgDef( std::string       def
-                        , FunctionArgInfo  &argInfo
-                        )
-{
-    def = trim(def);
-    if (def.empty())
-        return false;
-
-    std::string::size_type 
-    pos = def.find('(');
-
-    if (pos==def.npos) // simple
-    {
-        std::string type   = trim(readType(def));
-        argInfo.simple     = true;
-        argInfo.simpleType = normalizeTypeName(type);
-        argInfo.name       = trim(def);
-
-        // pos = def.find_last_of(' ');
-        // if (pos==def.npos)
-        // {
-        //     // only type
-        //     argInfo.simple     = true;
-        //     argInfo.simpleType = normalizeTypeName(def);
-        //     // argInfo.fnPointerType
-        //     //argInfo.name
-        // }
-        // else // simple type and name
-        // {
-        //     argInfo.simple     = true;
-        //     argInfo.simpleType = normalizeTypeName(std::string(def, 0, pos));
-        //     argInfo.name       = trim(std::string(def, pos+1));
-        // }
-    }
-    else // function ptr
-    {
-        //FunctionInfo  functionInfo;
-        bool parseRes = splitFunctionPointerDef( def, argInfo.fnPointerType);
-        if (!parseRes)
-            return false;
-
-        argInfo.simple     = false;
-
-        // перемещаем имя из инфы функции в инфу аргумента
-        argInfo.name = trim(argInfo.fnPointerType.name);
-        argInfo.fnPointerType.name.clear();
-    }
-
-    return true;
-}
-
-
-inline
-void scanForTypes(const FunctionInfo &fnInfo, std::unordered_set<std::string> &foundTypes)
-{
-    foundTypes.insert(fnInfo.retType);
-
-    for(const auto &arg: fnInfo.args)
-    {
-        if (arg.simple)
-        {
-            foundTypes.insert(arg.simpleType);
-        }
-        else
-        {
-            scanForTypes(arg.fnPointerType, foundTypes);
-        }
-    }
-}
-
-
-// struct FunctionInfo
-// {
-//     std::string                     retType;
-//     std::string                     ptrType;
-//     std::string                     name   ;
-//     std::vector<FunctionArgInfo>    args   ;
-// };
-//  
-// struct FunctionArgInfo
-// {
-//     bool           simple = true;
-//     std::string    simpleType   ;
-//     FunctionInfo   fnPointerType;
-//     std::string    name         ;
-// };
 
 
 
 int main( int argc, char* argv[] )
 {
+
+    // Format: entryname[=internal_name|other_module.exported_name]
+    //                  [@ordinal [NONAME] ]
+    //                  [ [PRIVATE] | [DATA] ]
+
+    #if 1
+    std::vector<std::string> exports = 
+    { "someFunc@ 0"
+    , "someFunc = someFunc@de$dwd @3"
+    , "someData DATA"
+    , "someFunc "
+    , "someFunc= someFunc@de$dwd @3"
+    , "someFunc=someFunc$de$dwd @3"
+    , "someFunc =someFunc$de$dwd @33"
+    , "someFunc=someFunc$de$dwd@43"
+    , "someFunc=someFunc$de$dwd@ 54"
+    , "someFunc@16"
+    , "someFunc @ 23"
+    , "someFunc=other.a@22 PRIVATE"
+    , "someData=other.d@3 DATA"
+    , "someData=other.@5 DATA"
+    , "someFunc=other.a @22 PRIVATE"
+    , "someData=other.d @3 DATA"
+    , "someData=other. @5 DATA"
+    , "someData=other."
+    };
+
+    ModuleExportEntry moduleExportEntry;
+
+    for(auto expLine: exports)
+    {
+        bool res = parseModuleExportEntry(expLine, moduleExportEntry);
+        std::cout << (res?"+ ":"- ") << expLine << "\n";
+        if (res)
+        {
+            std::cout << "        Entry: " << moduleExportEntry.entryName << "\n";
+            if (!moduleExportEntry.internalName.empty() && !moduleExportEntry.otherModule.empty())
+            {
+                std::cout << "        Internal & Forward: error\n";
+            }
+            else if (!moduleExportEntry.internalName.empty())
+            {
+                std::cout << "        Internal: " << moduleExportEntry.internalName << "\n";
+            }
+            else if (!moduleExportEntry.otherModule.empty())
+            {
+                if (moduleExportEntry.exportedName.empty())
+                {
+                    std::cout << "        Forward: error\n";
+                }
+                else
+                {
+                }
+                    std::cout << "        Forward: " << moduleExportEntry.otherModule << "." << moduleExportEntry.exportedName << "\n";
+            }
+
+            if (moduleExportEntry.ordinal!=(unsigned)-1)
+            {
+                std::cout << "        Ordinal: " << moduleExportEntry.ordinal << "\n";
+            }
+
+            StringAppendWithSep attrBuf = StringAppendWithSep(" ");
+            if (moduleExportEntry.attrs&moduleExportEntry.DefFileFlagNoname)
+            {
+                attrBuf.append("NONAME");
+            }
+            if (moduleExportEntry.attrs&moduleExportEntry.DefFileFlagPrivate)
+            {
+                attrBuf.append("PRIVATE");
+            }
+            if (moduleExportEntry.attrs&moduleExportEntry.DefFileFlagData)
+            {
+                attrBuf.append("DATA");
+            }
+
+            if (!attrBuf.empty())
+            {
+               std::cout << "        Attrs: " << attrBuf.toString() << "\n";
+            }
+
+        }
+    }
+    #endif
+
+
     std::string prototypesFilename;
     std::string proxyFunctionsFilename;
     std::string outputType;
@@ -746,8 +195,7 @@ int main( int argc, char* argv[] )
         prototypesFilename     = "../data/sqlite_prototypes.txt";
         proxyFunctionsFilename = "../data/sqlite_proxy_functions_list.txt";
         //outputType             = "proxynumbers";
-        //outputType             = "fnptrtable";
-        //outputType             = "fnnametable";
+        //outputType             = "fntables";
         //outputType             = "proxyfns";
         outputType             = "proxybodies";
         outputType             = "proxytypes";
@@ -782,52 +230,21 @@ int main( int argc, char* argv[] )
         std::cout << "failed to read prototypes file\n";
         return 1;
     }
-    std::string fileTextNormalizedLf = marty_cpp::normalizeCrLfToLf(fileText);
-    std::vector<std::string> lines = marty_cpp::splitToLinesSimple(fileTextNormalizedLf);
 
-    std::unordered_set<std::string> foundTypes;
-    std::vector<FunctionInfo> functionInfos;
+    ErrInfo errInfo;
 
-    std::size_t
-    lineNo = 0;
-    for(auto line: lines)
+    errInfo.fileName = prototypesFilename;
+
+    std::unordered_set<std::string>               foundTypes;
+    std::vector<FunctionInfo>                     functionInfos;
+    std::unordered_map<std::string, std::size_t>  fnDefsByName;
+
+    if (!parsePrototypes(fileText, errInfo, foundTypes, functionInfos, fnDefsByName))
     {
-        ++lineNo;
-
-        line = trim(line);
-
-        if (line.empty())
-        {
-            continue; // skip empty lines
-        }
-
-        //std::size_t startsLen
-        if (umba::string_plus::starts_with(line, std::string("/*")) || umba::string_plus::starts_with(line, std::string("//")) || umba::string_plus::starts_with(line, std::string("#")))
-        {
-            continue; // skip comment lines
-        }
-
-        if (line.back()==',')
-        {
-            std::cout << "error incomplete prototype (possible linefeed) in line " << lineNo << "\n";
-            return 1;
-        }
-
-        FunctionInfo functionInfo;
-        if (!splitFunctionPointerDef(line, functionInfo))
-        {
-            std::cout << "failed to parse function ptr in line " << lineNo << "\n";
-            return 1;
-        }
-
-        scanForTypes(functionInfo, foundTypes);
-
-        functionInfos.emplace_back(functionInfo);
-
-
-        //std::cout << lineNo << ": " << line << "\n";
-
+        std::cout << errInfo.errMsg << " in line " << errInfo.lineNo << "\n";
+        return 1;
     }
+
 
     #if 0
     std::cout << "\nFound types:" << "\n";
@@ -877,14 +294,28 @@ int main( int argc, char* argv[] )
 
     #endif
 
-
-    std::unordered_map<std::string, unsigned> fnDefsByName;
-    unsigned idx = (unsigned)-1;
-    for(auto fi: functionInfos)
+    if (outputType=="ellipsis")
     {
-        idx++;
-        fnDefsByName[fi.name] = idx;
+        for(auto fi: functionInfos)
+        {
+           if (fi.hasEllipsisArg())
+           {
+               std::cout << "Ellipsis function: " << fi.name << "\n";
+           }
+        }
+
+        return 0;
     }
+
+
+
+    // std::unordered_map<std::string, unsigned> fnDefsByName;
+    // unsigned idx = (unsigned)-1;
+    // for(auto fi: functionInfos)
+    // {
+    //     idx++;
+    //     fnDefsByName[fi.name] = idx;
+    // }
 
 
 
@@ -894,55 +325,17 @@ int main( int argc, char* argv[] )
         std::cout << "failed to read prototypes file\n";
         return 1;
     }
-    std::string proxyFunctionsFileTextNormalizedLf       = marty_cpp::normalizeCrLfToLf(proxyFunctionsFileText);
-    std::vector<std::string> proxyFunctionsFileTextLines = marty_cpp::splitToLinesSimple(proxyFunctionsFileTextNormalizedLf);
 
     std::vector<std::string>         proxyFunctionsList;
     std::unordered_set<std::string>  exportedData;
 
-    lineNo = 0;
-    for(auto line: proxyFunctionsFileTextLines)
+    errInfo.fileName = proxyFunctionsFilename;
+    if (!parseOutputProxyFunctionsList(proxyFunctionsFileText, errInfo, proxyFunctionsList, exportedData))
     {
-        ++lineNo;
-
-        line = trim(line);
-
-        if (line.empty())
-        {
-            continue; // skip empty lines
-        }
-
-        //std::size_t startsLen
-        if (umba::string_plus::starts_with(line, std::string("/*")) || umba::string_plus::starts_with(line, std::string("//")) || umba::string_plus::starts_with(line, std::string("#")))
-        {
-            continue; // skip comment lines
-        }
-
-        //bool res
-        umba::string_plus::starts_with_and_strip( line, std::string("sqlite3_") );
-
-        std::size_t pos = line.find(' ');
-        if (pos==line.npos)
-        {
-            proxyFunctionsList.emplace_back(line);
-        }
-        else
-        {
-            std::string name = trim(std::string(line, 0, pos));
-            std::string attr = marty_cpp::toUpper(trim(std::string(line, pos+1)));
-            if (attr=="DATA")
-            {
-                exportedData.insert(name);
-            }
-
-            proxyFunctionsList.emplace_back(name);
-        }
-
-
-        
-
-        //std::cout << line << "\n";
+        std::cout << errInfo.errMsg << " in line " << errInfo.lineNo << "\n";
+        return 1;
     }
+
 
     // sqlite3_data_directory DATA
     // sqlite3_temp_directory DATA
@@ -960,16 +353,14 @@ int main( int argc, char* argv[] )
     };
 
 
-    // if (outputType=="proxynumbers" || outputType=="fnptrtable" || outputType=="fnnametable")
+    // if (outputType=="proxynumbers" || outputType=="fnptrtable" || outputType=="fntables")
     {
-        if (outputType=="fnnametable")
+        if (outputType=="fntables")
         {
+            std::cout << "FARPROC orgSqliteFuncPointers[" << proxyFunctionsList.size() << "] = { 0 };\n\n";
+
             std::cout << "const char* orgSqliteFuncNames[" << proxyFunctionsList.size() << "] =\n";
 
-        }
-        else if (outputType=="fnptrtable")
-        {
-            std::cout << "FARPROC orgSqliteFuncPointers[" << proxyFunctionsList.size() << "] = { 0 ";
         }
 
         unsigned idx = (unsigned)-1;
@@ -977,7 +368,7 @@ int main( int argc, char* argv[] )
         {
             idx++;
 
-            if (outputType=="fnnametable"  /* || outputType=="fnptrtable" */ )
+            if (outputType=="fntables")
             {
                 if (!idx)
                     std::cout << "{ ";
@@ -989,13 +380,9 @@ int main( int argc, char* argv[] )
             {
                 std::cout << "#define " << makeFnIdxConstant(name) << "        " << idx << "\n";
             }
-            else if (outputType=="fnnametable")
+            else if (outputType=="fntables")
             {
                 std::cout << "\"sqlite3_" << name << "\"\n";
-            }
-            else if (outputType=="fnptrtable")
-            {
-                // std::cout << "0\n";
             }
             else if (outputType=="proxytypes")
             {
@@ -1004,7 +391,7 @@ int main( int argc, char* argv[] )
                     continue;
                 }
 
-                std::unordered_map<std::string, unsigned>::const_iterator it = fnDefsByName.find(name);
+                std::unordered_map<std::string, std::size_t>::const_iterator it = fnDefsByName.find(name);
                 if (it==fnDefsByName.end())
                 {
                     std::cout << "name '" << name << "' not found\n";
@@ -1025,12 +412,12 @@ int main( int argc, char* argv[] )
             {
                 if (isDataName(name))
                 {
-                    std::cout << "PROXY_EXPORT " << "PROXY_SQLITE3_" << marty_cpp::toUpper(name) << "_DATA(" << generateFunctionName(name, "sqlite3_$(FunctionName)") <<");\n\n";
+                    std::cout << "PROXY_EXPORT " << "PROXY_SQLITE3_" << marty_cpp::toUpper(name) << "_DATA(" /* << generateFunctionName(name, "sqlite3_$(FunctionName)") */ << ");\n\n";
                     continue;
                 }
 
 
-                std::unordered_map<std::string, unsigned>::const_iterator it = fnDefsByName.find(name);
+                std::unordered_map<std::string, std::size_t >::const_iterator it = fnDefsByName.find(name);
                 if (it==fnDefsByName.end())
                 {
                     std::cout << "name '" << name << "' not found\n";
@@ -1049,14 +436,14 @@ int main( int argc, char* argv[] )
                 std::cout << "" << generatedFunctionDef << "\n";
                 std::cout << "{\n";
 
-                std::cout << "    WHATSAPP_TRACE((\"Proxy called: %s\\n\", " << generateFunctionName(fi, "sqlite3_$(FunctionName)") << "));\n";
+                std::cout << "    WHATSAPP_TRACE((\"Proxy called: %s\\n\", \"" << generateFunctionName(fi, "sqlite3_$(FunctionName)") << "\"));\n";
 
                 if (!fi.hasEllipsisArg())
                 {
                     std::cout << "    " << generateFunctionName(fi, "sqlite3_$(FunctionName)_fnptr_t")
-                                        << " pfn = getOriginalFunctionPtr<" << generateFunctionName(fi, "sqlite3_$(FunctionName)_fnptr_t") << ">("
+                                        << " orgFnPtr = getOriginalFunctionPtr<" << generateFunctionName(fi, "sqlite3_$(FunctionName)_fnptr_t") << ">("
                                         << makeFnIdxConstant(fi.name) << ");\n";
-                    std::cout << "    " << "return " << generateFunctionCall(fi, "pfn", fnDefGenerateOptions) << ";\n";
+                    std::cout << "    " << (fi.voidReturn() ? "" : "return ") << generateFunctionCall(fi, "orgFnPtr", fnDefGenerateOptions) << ";\n";
                 }
                 else
                 {
@@ -1070,7 +457,7 @@ int main( int argc, char* argv[] )
             
         }
 
-        if (outputType=="fnnametable" || outputType=="fnptrtable")
+        if (outputType=="fntables")
         {
             std::cout << "};\n";
         }

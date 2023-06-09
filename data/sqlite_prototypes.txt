@@ -69,7 +69,7 @@
   const char * (*libversion)(void);
   int  (*libversion_number)(void);
   void *(*malloc)(int);
-  char * (*mprintf)(const char*,...);
+  char * (*mprintf)(const char*zFormat,...);
   int  (*open)(const char*,sqlite3**);
   int  (*open16)(const void*,sqlite3**);
   int  (*prepare)(sqlite3*,const char*,int,sqlite3_stmt**,const char**);
@@ -244,7 +244,7 @@
   int (*keyword_check)(const char*,int);
   sqlite3_str *(*str_new)(sqlite3*);
   char *(*str_finish)(sqlite3_str*);
-  void (*str_appendf)(sqlite3_str*, const char *zFormat, ...);
+  void (*str_appendf)(sqlite3_str*p, const char *zFormat, ...);
   void (*str_vappendf)(sqlite3_str*, const char *zFormat, va_list);
   void (*str_append)(sqlite3_str*, const char *zIn, int N);
   void (*str_appendall)(sqlite3_str*, const char *zIn);
@@ -320,7 +320,7 @@
   int  (*snapshot_get)(sqlite3 *db, const char *zSchema, sqlite3_snapshot **ppSnapshot);
   int  (*snapshot_open)(sqlite3 *db, const char *zSchema, sqlite3_snapshot *pSnapshot);
   int  (*snapshot_recover)(sqlite3 *db, const char *zDb);
-  char *(*snprintf)(int,char*,const char*, ...);
+  char *(*snprintf)(int n, char *zBuf, const char *zFormat, ...);
   char *(*vsnprintf)(int,char*,const char*, va_list);
   int (*threadsafe)(void);
 
