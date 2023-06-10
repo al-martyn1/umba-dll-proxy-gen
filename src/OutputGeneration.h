@@ -20,82 +20,6 @@ bool generateEllipsisReport(StreamType &oss, ErrInfo &errInfo, const InputData &
 }
 
 
-// struct DllProxyGenerationOptions
-// {
-//     std::string dllForwardTarget; //!<
-//  
-//     bool forwardData                = false; //!< форвардим все данные
-//     bool forwardEllipsis            = false; //!< форвардим все функции с элипсисом
-//  
-//     bool generateJumpEllipsis       = false; //!< генерим JUMP вместо вызова оригинальной функции для функций с ELLIPSIS
-//     bool generateJumpAll            = false; //!< генерим JUMP вместо вызова оригинальной функции для всех прокси
-//  
-//     bool generateHelo               = false; //!< генерировать код "Proxy called"
-//     bool generateCustomHandler      = false; //!< генерировать код пользовательских обработчиков через макросы #ifdef HANDLER HANDLER() #endif
-//  
-// }; // struct DllProxyGenerationOptions
-
-
-
-// struct ModuleExportEntry
-// {
-//     static const unsigned DefFileFlagNoname  = 0x0001;
-//     static const unsigned DefFileFlagPrivate = 0x0002;
-//     static const unsigned DefFileFlagData    = 0x0004;
-//  
-//     std::string       entryName    ;         // экспортируемое из модуля имя
-//     std::string       internalName ;         // внутреннее имя/
-//     std::string       otherModule  ;
-//     std::string       exportedName ; // other_module exported_name
-//     unsigned          ordinal      = 0;
-//     unsigned          attrs        = 0; // DefFileFlag*
-//  
-//     bool isForwardEntry() const
-//     {
-//         return !otherModule.empty() && !exportedName.empty();
-//     }
-//  
-//     // Для не ForwardEntry
-//     std::string getInternalName() const
-//     {
-//         return internalName.empty() ? entryName : internalName;
-//     }
-//  
-//     bool isDataEntry() const
-//     {
-//         return (attrs&DefFileFlagData) ? true : false;
-//     }
-//  
-// }; // struct ModuleExportEntry
-
-
-// inline
-// bool isForwardEntry(const ModuleExportEntry &me, const DllProxyGenerationOptions &pgo)
-// {
-//     if (me.isForwardEntry())
-//         return true;
-//  
-//     if (me.isDataEntry())
-//         return pgo.forwardData;
-//  
-//     return false;
-// }
-//  
-// inline
-// bool isForwardEntry(const FunctionInfo &fi, const DllProxyGenerationOptions &pgo)
-// {
-//     if (!fi.hasEllipsisArg())
-//         return false;
-//  
-//     // Has ellipsis
-//     if (pgo.forwardEllipsis)
-//         return true;
-//  
-//     return false;
-// }
-
-
-
 template<typename StreamType> inline
 bool generateFunctionTables(StreamType &oss, ErrInfo &errInfo, const InputData &inputData, DllProxyGenerationOptions &proxyGenerationOptions)
 {
@@ -317,7 +241,7 @@ bool generateProxyCode(StreamType &oss, ErrInfo &errInfo, const InputData &input
         FnDefGenerateOptions fnDefGenerateOptions;
         fnDefGenerateOptions.prototypePrefix = "PROXY_EXPORT";
 
-        generateArgNames(fi);
+        generateArgNames(fi, proxyGenerationOptions);
 
         FunctionInfo fiClr = fi;
         clearArgNames(fiClr);

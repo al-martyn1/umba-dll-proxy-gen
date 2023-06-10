@@ -276,7 +276,7 @@ bool parsePrototypes( const std::string                            &prototypesTe
         FunctionInfo functionInfo;
         if (!splitFunctionPointerDef(line, functionInfo))
         {
-            errInfo.errMsg = "failed to parse function ptr;";
+            errInfo.errMsg = "failed to parse function prototype/pointer;";
             //std::cout << "failed to parse function ptr in line " << lineNo << "\n";
             return false;
         }
@@ -305,15 +305,6 @@ bool parsePrototypes( const std::string   &prototypesText
 {
     return parsePrototypes(prototypesText, errInfo, inputData.foundTypes, inputData.functionInfos, inputData.fnDefsByName);
 }
-
-
-// Format: entryname[=internal_name|other_module.exported_name] [@ordinal [NONAME] ] [ [PRIVATE] | [DATA] ]
-
-
-
-
-
-
 
 
 inline

@@ -148,6 +148,7 @@ int main( int argc, char* argv[] )
     #endif
 
 
+    std::string initialNamesFilename;
     std::string iniFilename;
     std::string prototypesFilename;
     std::string proxyFunctionsFilename;
@@ -155,29 +156,35 @@ int main( int argc, char* argv[] )
 
     if (argc>1)
     {
-        iniFilename = argv[1];
+        initialNamesFilename = argv[1];
     }
 
     if (argc>2)
     {
-        prototypesFilename = argv[2];
+        iniFilename = argv[2];
     }
 
     if (argc>3)
     {
-        proxyFunctionsFilename = argv[3];
+        prototypesFilename = argv[3];
     }
 
     if (argc>4)
     {
-        outputType = argv[4];
+        proxyFunctionsFilename = argv[4];
+    }
+
+    if (argc>5)
+    {
+        outputType = argv[5];
     }
 
 
     #if defined(WIN32) || defined(_WIN32)
     if (IsDebuggerPresent())
     {
-        iniFilename            = "../data/sqlite.ini";
+        initialNamesFilename   = "../data/initial_names.txt";
+        iniFilename            = "../proxy.ini";
         prototypesFilename     = "../data/sqlite_prototypes.txt";
         proxyFunctionsFilename = "../data/sqlite_proxy_functions_list.txt";
         //outputType             = "fnindexes";
@@ -191,13 +198,19 @@ int main( int argc, char* argv[] )
 
     auto printHelp = [](int res)
     {
-        std::cerr << "Usage: gen INI PROTOTYPES FNLIST OUTPUTTYPE\n";
+        std::cerr << "Usage: gen ARGNAMES.INI CONFIG.INI PROTOTYPES_FILE FNLIST_FILE OUTPUTTYPE\n";
         return res;
     };
 
-    if (iniFilename.empty())
+    if (initialNamesFilename.empty())
     {
         std::cerr << "config filename not taken\n";
+        return printHelp(1);
+    }
+
+    if (iniFilename.empty())
+    {
+        std::cerr << "config filenamenot taken\n";
         return printHelp(1);
     }
 
@@ -224,6 +237,22 @@ int main( int argc, char* argv[] )
     InputData   inputData;
     ErrInfo     errInfo;
     DllProxyGenerationOptions  proxyGenerationOptions;
+
+
+    errInfo.fileName = initialNamesFilename;
+
+    std::string initialNamesText;
+    if (!umba::filesys::readFile(initialNamesFilename, initialNamesText))
+    {
+        std::cout << "failed to read initial names file\n";
+        return 1;
+    }
+
+    if (!parseParamInitialNames(initialNamesText, errInfo, proxyGenerationOptions))
+    {
+        std::cout << errInfo.errMsg << " in line " << errInfo.lineNo << "\n";
+        return 1;
+    }
 
 
     errInfo.fileName = iniFilename;
@@ -332,10 +361,40 @@ int main( int argc, char* argv[] )
     // proxyGenerationOptions.forwardData       = true;
     // proxyGenerationOptions.forwardEllipsis   = true;
     //  
-    // inputData.updateForwards(proxyGenerationOptions);
+
+    
+    inputData.updateForwards(proxyGenerationOptions);
+
+    if (outputType=="types")
+    {
+        for(auto foundType: inputData.foundTypes)
+        {
+            std::cout << foundType << "\n";
+        }
 
 
-    if (outputType=="ellipsis")
+        std::vector<std::string> noInitialNameList;
+        const auto &paramInitialNames = proxyGenerationOptions.paramInitialNames;
+
+        for(auto foundType: inputData.foundTypes)
+        {
+            if (paramInitialNames.find(foundType)==paramInitialNames.end())
+            {
+                // Начальное имя не найдено
+                noInitialNameList.emplace_back(foundType);
+            }
+        }
+
+        if (!noInitialNameList.empty())
+        {
+            std::cout << "#-------" << "\n";
+            for(auto nn: noInitialNameList)
+            {
+                std::cout << nn << "\n";
+            }
+        }
+    }
+    else if (outputType=="ellipsis")
     {
         if (!generateEllipsisReport(std::cout, errInfo, inputData, proxyGenerationOptions))
         {

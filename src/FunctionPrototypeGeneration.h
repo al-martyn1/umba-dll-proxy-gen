@@ -4,6 +4,7 @@
 //
 
 #include "FunctionPrototypeTypes.h"
+#include "GenerationOptions.h"
 #include "StringAppendWithSep.h"
 
 #include "umba/string_plus.h"
@@ -26,7 +27,7 @@ struct FnDefGenerateOptions
 }; // struct FnDefGenerateOptions
 
 
-
+#if 0
 const std::unordered_map<std::string,std::string>& getInitialNames()
 {
     static
@@ -87,7 +88,7 @@ const std::unordered_map<std::string,std::string>& getInitialNames()
 
     return m;
 }
-
+#endif
 
 
 inline
@@ -100,9 +101,9 @@ void clearArgNames(FunctionInfo &fi)
 }
 
 inline
-void generateArgNames(FunctionInfo &fi)
+void generateArgNames(FunctionInfo &fi, const DllProxyGenerationOptions &pgo)
 {
-    const std::unordered_map<std::string,std::string>& initialNames = getInitialNames();
+    const std::unordered_map<std::string,std::string>& initialNames = pgo.paramInitialNames; // getInitialNames();
 
     std::unordered_set<std::string>  usedNames;
     for(auto &arg: fi.args)
@@ -117,7 +118,7 @@ void generateArgNames(FunctionInfo &fi)
         }
         else
         {
-            if (arg.simpleType=="..." || arg.simpleType=="void")
+            if (arg.simpleType=="..." || arg.simpleType=="void" || arg.simpleType=="VOID")
                 continue;
 
             std::unordered_map<std::string,std::string>::const_iterator it = initialNames.find(arg.simpleType);
