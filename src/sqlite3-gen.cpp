@@ -10,6 +10,7 @@
 #include "FunctionPrototypeParsing.h"
 #include "StringAppendWithSep.h"
 #include "InputData.h"
+#include "OutputGeneration.h"
 #include "utils.h"
 
 #include "umba/filesys.h"
@@ -60,29 +61,6 @@
 
 
 
-
-
-
-// struct IsPtrSign
-// {
-//     bool operator()(char ch) const
-//     {
-//         return ch=='*';
-//     }
-// };
-//  
-// struct IsRefSign
-// {
-//     bool operator()(char ch) const
-//     {
-//         return ch=='*';
-//     }
-// };
-
-
-
-
-
 int main( int argc, char* argv[] )
 {
 
@@ -90,7 +68,7 @@ int main( int argc, char* argv[] )
     //                  [@ordinal [NONAME] ]
     //                  [ [PRIVATE] | [DATA] ]
 
-    #if 1
+    #if 0
     std::vector<std::string> exports = 
     { "someFunc@ 0"
     , "someFunc = someFunc@de$dwd @3"
@@ -170,59 +148,101 @@ int main( int argc, char* argv[] )
     #endif
 
 
+    std::string iniFilename;
     std::string prototypesFilename;
     std::string proxyFunctionsFilename;
     std::string outputType;
 
     if (argc>1)
     {
-        prototypesFilename = argv[1];
+        iniFilename = argv[1];
     }
 
     if (argc>2)
     {
-        proxyFunctionsFilename = argv[2];
+        prototypesFilename = argv[2];
     }
 
     if (argc>3)
     {
-        outputType = argv[3];
+        proxyFunctionsFilename = argv[3];
     }
+
+    if (argc>4)
+    {
+        outputType = argv[4];
+    }
+
 
     #if defined(WIN32) || defined(_WIN32)
     if (IsDebuggerPresent())
     {
+        iniFilename            = "../data/sqlite.ini";
         prototypesFilename     = "../data/sqlite_prototypes.txt";
         proxyFunctionsFilename = "../data/sqlite_proxy_functions_list.txt";
-        //outputType             = "proxynumbers";
+        //outputType             = "fnindexes";
         //outputType             = "fntables";
         //outputType             = "proxyfns";
-        outputType             = "proxybodies";
         outputType             = "proxytypes";
-        //outputType             = "";
+        outputType             = "ellipsis";
+        outputType             = "proxycode";
     }
     #endif
 
+    auto printHelp = [](int res)
+    {
+        std::cerr << "Usage: gen INI PROTOTYPES FNLIST OUTPUTTYPE\n";
+        return res;
+    };
+
+    if (iniFilename.empty())
+    {
+        std::cerr << "config filename not taken\n";
+        return printHelp(1);
+    }
 
     if (prototypesFilename.empty())
     {
-        std::cout << "prototypes filename not taken\n";
-        return 1;
+        std::cerr << "prototypes filename not taken\n";
+        return printHelp(1);
     }
 
     if (proxyFunctionsFilename.empty())
     {
-        std::cout << "proxy functions list filename not taken\n";
-        return 1;
+        std::cerr << "proxy functions list filename not taken\n";
+        return printHelp(1);
     }
 
     if (outputType.empty())
     {
-        std::cout << "output type not taken\n";
+        std::cerr << "output type not taken\n";
+        return printHelp(1);
+    }
+
+
+
+    InputData   inputData;
+    ErrInfo     errInfo;
+    DllProxyGenerationOptions  proxyGenerationOptions;
+
+
+    errInfo.fileName = iniFilename;
+
+    std::string iniText;
+    if (!umba::filesys::readFile(iniFilename, iniText))
+    {
+        std::cout << "failed to read ini file\n";
         return 1;
     }
 
-    
+    if (!parseDllProxyGenerationOptions(iniText, errInfo, proxyGenerationOptions))
+    {
+        std::cout << errInfo.errMsg << " in line " << errInfo.lineNo << "\n";
+        return 1;
+    }
+
+
+    errInfo.fileName = prototypesFilename;
 
     std::string fileText;
     if (!umba::filesys::readFile(prototypesFilename, fileText))
@@ -231,19 +251,28 @@ int main( int argc, char* argv[] )
         return 1;
     }
 
-    ErrInfo errInfo;
-
-    errInfo.fileName = prototypesFilename;
-
-    std::unordered_set<std::string>               foundTypes;
-    std::vector<FunctionInfo>                     functionInfos;
-    std::unordered_map<std::string, std::size_t>  fnDefsByName;
-
-    if (!parsePrototypes(fileText, errInfo, foundTypes, functionInfos, fnDefsByName))
+    if (!parsePrototypes(fileText, errInfo, inputData))
     {
         std::cout << errInfo.errMsg << " in line " << errInfo.lineNo << "\n";
         return 1;
     }
+
+
+    errInfo.fileName = proxyFunctionsFilename;
+
+    std::string proxyFunctionsFileText;
+    if (!umba::filesys::readFile(proxyFunctionsFilename, proxyFunctionsFileText))
+    {
+        std::cout << "failed to read prototypes file\n";
+        return 1;
+    }
+
+    if (!parseOutputProxyFunctionsList(proxyFunctionsFileText, errInfo, inputData))
+    {
+        std::cout << errInfo.errMsg << " in line " << errInfo.lineNo << "\n";
+        return 1;
+    }
+
 
 
     #if 0
@@ -270,15 +299,15 @@ int main( int argc, char* argv[] )
         FunctionInfo fiPtr = fi;
         clearArgNames(fiPtr);
         std::string
-        generatedFunctionDef = generateFunctionDef(fiPtr, true, "org_sqlite3_$(FunctionName)", fnDefGenerateOptions);
+        generatedFunctionDef = generateFunctionDef(fiPtr, true, "org_$(FunctionName)", fnDefGenerateOptions);
         std::cout << "Fn Ptr  : " << generatedFunctionDef << "\n";
 
         FunctionInfo fiProto = fi;
         generateArgNames(fiProto);
-        generatedFunctionDef = generateFunctionDef(fiProto, false, "sqlite3_$(FunctionName)", fnDefGenerateOptions);
+        generatedFunctionDef = generateFunctionDef(fiProto, false, "$(FunctionName)", fnDefGenerateOptions);
         std::cout << "Fn Proto: " << generatedFunctionDef << "\n";
 
-        generatedFunctionDef = generateFunctionCall(fiProto, "org_sqlite3_$(FunctionName)", fnDefGenerateOptions);
+        generatedFunctionDef = generateFunctionCall(fiProto, "org_$(FunctionName)", fnDefGenerateOptions);
         std::cout << "Fn Call : " << generatedFunctionDef << "\n";
 
         std::cout << "\n";
@@ -294,176 +323,72 @@ int main( int argc, char* argv[] )
 
     #endif
 
+
+    // DllProxyGenerationOptions  proxyGenerationOptions;
+    //  
+    // proxyGenerationOptions.dllForwardTarget = "e_sqlite3_org";
+    // proxyGenerationOptions.dllTarget        = "e_sqlite3"; // .dll";
+    //  
+    // proxyGenerationOptions.forwardData       = true;
+    // proxyGenerationOptions.forwardEllipsis   = true;
+    //  
+    // inputData.updateForwards(proxyGenerationOptions);
+
+
     if (outputType=="ellipsis")
     {
-        for(auto fi: functionInfos)
+        if (!generateEllipsisReport(std::cout, errInfo, inputData, proxyGenerationOptions))
         {
-           if (fi.hasEllipsisArg())
-           {
-               std::cout << "Ellipsis function: " << fi.name << "\n";
-           }
-        }
-
-        return 0;
-    }
-
-
-
-    // std::unordered_map<std::string, unsigned> fnDefsByName;
-    // unsigned idx = (unsigned)-1;
-    // for(auto fi: functionInfos)
-    // {
-    //     idx++;
-    //     fnDefsByName[fi.name] = idx;
-    // }
-
-
-
-    std::string proxyFunctionsFileText;
-    if (!umba::filesys::readFile(proxyFunctionsFilename, proxyFunctionsFileText))
-    {
-        std::cout << "failed to read prototypes file\n";
-        return 1;
-    }
-
-    std::vector<std::string>         proxyFunctionsList;
-    std::unordered_set<std::string>  exportedData;
-
-    errInfo.fileName = proxyFunctionsFilename;
-    if (!parseOutputProxyFunctionsList(proxyFunctionsFileText, errInfo, proxyFunctionsList, exportedData))
-    {
-        std::cout << errInfo.errMsg << " in line " << errInfo.lineNo << "\n";
-        return 1;
-    }
-
-
-    // sqlite3_data_directory DATA
-    // sqlite3_temp_directory DATA
-    // sqlite3_version DATA
-
-    auto makeFnIdxConstant = [](std::string s)
-    {
-        return std::string("ORG_SQLITE3_FN_IDX_") + marty_cpp::toUpper(s);
-    };
-
-    auto isDataName = [&](std::string s)
-    {
-        return exportedData.find(s)!=exportedData.end();
-    
-    };
-
-
-    // if (outputType=="proxynumbers" || outputType=="fnptrtable" || outputType=="fntables")
-    {
-        if (outputType=="fntables")
-        {
-            std::cout << "FARPROC orgSqliteFuncPointers[" << proxyFunctionsList.size() << "] = { 0 };\n\n";
-
-            std::cout << "const char* orgSqliteFuncNames[" << proxyFunctionsList.size() << "] =\n";
-
-        }
-
-        unsigned idx = (unsigned)-1;
-        for(auto name: proxyFunctionsList)
-        {
-            idx++;
-
-            if (outputType=="fntables")
-            {
-                if (!idx)
-                    std::cout << "{ ";
-                else
-                    std::cout << ", ";
-            }
-
-            if (outputType=="proxynumbers")
-            {
-                std::cout << "#define " << makeFnIdxConstant(name) << "        " << idx << "\n";
-            }
-            else if (outputType=="fntables")
-            {
-                std::cout << "\"sqlite3_" << name << "\"\n";
-            }
-            else if (outputType=="proxytypes")
-            {
-                if (isDataName(name))
-                {
-                    continue;
-                }
-
-                std::unordered_map<std::string, std::size_t>::const_iterator it = fnDefsByName.find(name);
-                if (it==fnDefsByName.end())
-                {
-                    std::cout << "name '" << name << "' not found\n";
-                    std::cerr << "name '" << name << "' not found\n";
-                    return 1;
-                }
-
-                FnDefGenerateOptions fnDefGenerateOptions;
-                //unsigned idx = 
-                FunctionInfo fi = functionInfos[it->second];
-                clearArgNames(fi);
-                std::string
-                generatedFunctionDef = generateFunctionDef(fi, true, "sqlite3_$(FunctionName)_fnptr_t", fnDefGenerateOptions);
-                std::cout << "typedef " << generatedFunctionDef << ";\n";
-
-            }
-            else if (outputType=="proxybodies")
-            {
-                if (isDataName(name))
-                {
-                    std::cout << "PROXY_EXPORT " << "PROXY_SQLITE3_" << marty_cpp::toUpper(name) << "_DATA(" /* << generateFunctionName(name, "sqlite3_$(FunctionName)") */ << ");\n\n";
-                    continue;
-                }
-
-
-                std::unordered_map<std::string, std::size_t >::const_iterator it = fnDefsByName.find(name);
-                if (it==fnDefsByName.end())
-                {
-                    std::cout << "name '" << name << "' not found\n";
-                    std::cerr << "name '" << name << "' not found\n";
-                    return 1;
-                }
-
-                FnDefGenerateOptions fnDefGenerateOptions;
-                fnDefGenerateOptions.prototypePrefix = "PROXY_EXPORT";
-                FunctionInfo fi = functionInfos[it->second];
-                generateArgNames(fi);
-                FunctionInfo fiClr;
-                clearArgNames(fiClr);
-                std::string
-                generatedFunctionDef = generateFunctionDef(fi, false, "sqlite3_$(FunctionName)", fnDefGenerateOptions);
-                std::cout << "" << generatedFunctionDef << "\n";
-                std::cout << "{\n";
-
-                std::cout << "    WHATSAPP_TRACE((\"Proxy called: %s\\n\", \"" << generateFunctionName(fi, "sqlite3_$(FunctionName)") << "\"));\n";
-
-                if (!fi.hasEllipsisArg())
-                {
-                    std::cout << "    " << generateFunctionName(fi, "sqlite3_$(FunctionName)_fnptr_t")
-                                        << " orgFnPtr = getOriginalFunctionPtr<" << generateFunctionName(fi, "sqlite3_$(FunctionName)_fnptr_t") << ">("
-                                        << makeFnIdxConstant(fi.name) << ");\n";
-                    std::cout << "    " << (fi.voidReturn() ? "" : "return ") << generateFunctionCall(fi, "orgFnPtr", fnDefGenerateOptions) << ";\n";
-                }
-                else
-                {
-                    std::cout << "    PROXY_SQLITE3_" << marty_cpp::toUpper(name) << "_IMPL();\n";
-                }
-
-                std::cout << "}\n\n";
-
-            }
-
-            
-        }
-
-        if (outputType=="fntables")
-        {
-            std::cout << "};\n";
+            std::cout << errInfo.errMsg << "\n";
+            std::cerr << errInfo.errMsg << "\n";
+            return 1;
         }
     }
-
-
+    else if (outputType=="fntables")
+    {
+        if (!generateFunctionTables(std::cout, errInfo, inputData, proxyGenerationOptions))
+        {
+            std::cout << errInfo.errMsg << "\n";
+            std::cerr << errInfo.errMsg << "\n";
+            return 1;
+        }
+    }
+    else if (outputType=="proxytypes")
+    {
+        if (!generateProxyTypes(std::cout, errInfo, inputData, proxyGenerationOptions))
+        {
+            std::cout << errInfo.errMsg << "\n";
+            std::cerr << errInfo.errMsg << "\n";
+            return 1;
+        }
+    }
+    else if (outputType=="fnindexes")
+    {
+        if (!generateProxyIndexes(std::cout, errInfo, inputData, proxyGenerationOptions))
+        {
+            std::cout << errInfo.errMsg << "\n";
+            std::cerr << errInfo.errMsg << "\n";
+            return 1;
+        }
+    }
+    else if (outputType=="def")
+    {
+        if (!generateDef(std::cout, errInfo, inputData, proxyGenerationOptions))
+        {
+            std::cout << errInfo.errMsg << "\n";
+            std::cerr << errInfo.errMsg << "\n";
+            return 1;
+        }
+    }
+    else if (outputType=="proxycode")
+    {
+        if (!generateProxyCode(std::cout, errInfo, inputData, proxyGenerationOptions))
+        {
+            std::cout << errInfo.errMsg << "\n";
+            std::cerr << errInfo.errMsg << "\n";
+            return 1;
+        }
+    }
 
     /*
     Ellipsis function: mprintf       - vmprintf

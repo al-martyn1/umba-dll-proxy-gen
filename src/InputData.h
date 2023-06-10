@@ -5,6 +5,7 @@
 
 #include "ErrInfo.h"
 #include "FunctionPrototypeTypes.h"
+#include "GenerationOptions.h"
 #include "utils.h"
 #include "umba/string_plus.h"
 
@@ -23,12 +24,36 @@ struct ModuleExportEntry
     static const unsigned DefFileFlagPrivate = 0x0002;
     static const unsigned DefFileFlagData    = 0x0004;
 
-    std::string       entryName    ;
-    std::string       internalName ;
+    std::string       entryName    ;         // экспортируемое из модуля имя
+    std::string       internalName ;         // внутреннее имя/
     std::string       otherModule  ;
     std::string       exportedName ; // other_module exported_name
     unsigned          ordinal      = 0;
     unsigned          attrs        = 0; // DefFileFlag*
+
+    bool isForwardEntry() const
+    {
+        return !otherModule.empty() && !exportedName.empty();
+    }
+
+    // Для не ForwardEntry
+    std::string getInternalName() const
+    {
+        return internalName.empty() ? entryName : internalName;
+    }
+
+    bool isDataEntry() const
+    {
+        return (attrs&DefFileFlagData) ? true : false;
+    }
+
+    void updateToForwardEntry(const std::string &forwardToModule)
+    {
+        exportedName = entryName;
+        otherModule  = forwardToModule;
+        internalName.clear();
+    }
+
 
 }; // struct ModuleExportEntry
 
@@ -36,9 +61,138 @@ struct ModuleExportEntry
 
 struct InputData
 {
-    std::unordered_set<std::string>                   foundTypes   ;
-    std::vector<FunctionInfo>                         functionInfos;
-    std::unordered_map<std::string, std::size_t>      fnDefsByName ;
+    std::unordered_set<std::string>                   foundTypes                    ;
+    std::vector<FunctionInfo>                         functionInfos                 ;
+    std::unordered_map<std::string, std::size_t>      fnDefsByName                  ;
+
+    // std::vector<std::string>                          proxyFunctionsList            ;
+    // std::unordered_set<std::string>                   exportedData                  ;
+
+    // 
+    std::vector<ModuleExportEntry>                    moduleEntries                 ;
+    std::unordered_map<std::string, std::size_t>      moduleEntriesByName           ; // А оно надо?
+
+
+    void updateForwards(const DllProxyGenerationOptions pgo)
+    {
+        if (pgo.dllForwardTarget.empty())
+            return;
+
+        for(auto &me: moduleEntries)
+        {
+            if (me.isForwardEntry())
+                continue;
+
+            if (me.isDataEntry())
+            {
+                if (pgo.forwardData)
+                {
+                    me.updateToForwardEntry(pgo.dllForwardTarget);
+                }
+
+                continue;
+            }
+
+            FunctionInfo fi;
+             
+            if (!getFunctionInfoByName(me.getInternalName(), fi))
+                continue;
+
+            if (fi.hasEllipsisArg())
+            {
+                if (pgo.forwardEllipsis)
+                {
+                    me.updateToForwardEntry(pgo.dllForwardTarget);
+                }
+
+                continue;
+            }
+
+            // Other conditions check here
+        }
+    
+    }
+
+
+    template<typename Filter>
+    std::vector<std::string> getModuleExportEntryNames(const DllProxyGenerationOptions &pgo, Filter filter, bool bForward) const
+    {
+        std::vector<std::string> resVec;
+
+        for(const auto &me: moduleEntries)
+        {
+            if (!filter(me))
+               continue;
+
+            bool
+            meForward = me.isForwardEntry();
+            if (meForward!=bForward)
+                continue;
+
+            if (me.isDataEntry())
+            {
+                if (pgo.forwardData!=bForward)
+                    continue;
+            }
+            else
+            {
+                FunctionInfo fi;
+                 
+                if (!getFunctionInfoByName(me.getInternalName(), fi))
+                    continue;
+                 
+                meForward = fi.hasEllipsisArg() && pgo.forwardEllipsis;
+                if (meForward!=bForward)
+                    continue;
+            }
+
+            resVec.emplace_back(me.entryName);
+        }
+
+        return resVec;
+    }
+
+    template<typename Filter>
+    std::vector<std::string> getImplementProxyNames(const DllProxyGenerationOptions &pgo, Filter filter) const
+    {
+        return getModuleExportEntryNames(pgo, filter, false);
+    }
+
+    template<typename Filter>
+    std::vector<std::string> getForwardNames(const DllProxyGenerationOptions &pgo, Filter filter) const
+    {
+        return getModuleExportEntryNames(pgo, filter, true);
+    }
+
+
+    bool addModuleExportEntry(const ModuleExportEntry &me)
+    {
+        std::unordered_map<std::string, std::size_t>::const_iterator mit = moduleEntriesByName.find(me.entryName);
+        if (mit!=moduleEntriesByName.end())
+        {
+            return false;
+        }
+
+        moduleEntriesByName[me.entryName] = moduleEntries.size();
+        moduleEntries.emplace_back(me);
+
+        return true;
+    }
+
+    bool getModuleExportEntryByName(const std::string &name, ModuleExportEntry &me) const
+    {
+         std::unordered_map<std::string, std::size_t>::const_iterator mit = moduleEntriesByName.find(name);
+         if (mit==moduleEntriesByName.end())
+             return false;
+
+         std::size_t idx = mit->second;
+         if (idx>=moduleEntries.size())
+             return false;
+
+         me = moduleEntries[idx];
+
+         return true;
+    }
 
     bool getFunctionInfoByName( const std::string &name, FunctionInfo &fi) const
     {
@@ -54,24 +208,6 @@ struct InputData
 
         return true;
     }
-
-    std::vector<ModuleExportEntry>   moduleEntries;
-
-// struct ModuleExportEntry
-// {
-//     static const unsigned DefFileFlagNoname  = 0x0001;
-//     static const unsigned DefFileFlagPrivate = 0x0002;
-//     static const unsigned DefFileFlagData    = 0x0004;
-//  
-//     std::string       entryName    ;
-//     std::string       internalName ;
-//     std::string       otherModule  ;
-//     std::string       exportedName ; // other_module exported_name
-//     unsigned          ordinal      = 0;
-//     unsigned          attrs        = 0; // DefFileFlag*
-//  
-// }; // struct ModuleExportEntry
-
 
 }; // struct InputData
 
@@ -190,6 +326,11 @@ bool parseModuleExportEntry( const std::string &str
                            , unsigned          &attrs // DefFileFlag*
                            )
 {
+    // Exporting from a DLL Using DEF Files - https://learn.microsoft.com/en-us/cpp/build/exporting-from-a-dll-using-def-files?view=msvc-170
+    // EXPORTS - https://learn.microsoft.com/en-us/cpp/build/reference/exports?view=msvc-170
+    // Module-Definition (.Def) Files - https://learn.microsoft.com/en-us/cpp/build/reference/module-definition-dot-def-files?view=msvc-170
+    // https://social.msdn.microsoft.com/Forums/en-US/a27fcdea-9836-450f-9889-f2a2e0003b42/dll-export-forwarding-by-ordinal-not-workingmsvc2013?forum=visualstudiogeneral
+
     entryName.clear();
     internalName.clear();
     otherModule.clear();
@@ -573,10 +714,9 @@ bool parseModuleExportEntry( const std::string &str
 
 
 inline
-bool parseOutputProxyFunctionsList( const std::string                 &functionsListText
+bool parseOutputProxyFunctionsList( const std::string                &functionsListText
                                   , ErrInfo                          &errInfo
-                                  , std::vector<std::string>         &proxyFunctionsList
-                                  , std::unordered_set<std::string>  &exportedData
+                                  , InputData                        &inputData
                                   )
 {
     std::string proxyFunctionsFileTextNormalizedLf       = marty_cpp::normalizeCrLfToLf(functionsListText);
@@ -595,35 +735,22 @@ bool parseOutputProxyFunctionsList( const std::string                 &functions
         }
 
         //std::size_t startsLen
-        if (umba::string_plus::starts_with(line, std::string("/*")) || umba::string_plus::starts_with(line, std::string("//")) || umba::string_plus::starts_with(line, std::string("#")))
+        if (umba::string_plus::starts_with(line, std::string("/*")) || umba::string_plus::starts_with(line, std::string("//")) || umba::string_plus::starts_with(line, std::string("#")) || umba::string_plus::starts_with(line, std::string(";")))
         {
             continue; // skip comment lines
         }
 
-        //bool res
-        umba::string_plus::starts_with_and_strip( line, std::string("sqlite3_") );
-
-        std::size_t pos = line.find(' ');
-        if (pos==line.npos)
+        ModuleExportEntry me;
+        if (!parseModuleExportEntry(line, me))
         {
-            proxyFunctionsList.emplace_back(line);
+            errInfo.errMsg = "invalid export entry: '" + line + "'";
+            return false;
         }
-        else
+
+        if (!inputData.addModuleExportEntry(me))
         {
-            // Forwarding - https://devblogs.microsoft.com/oldnewthing/20121116-00/?p=6073
-            // Exporting from a DLL Using DEF Files - https://learn.microsoft.com/en-us/cpp/build/exporting-from-a-dll-using-def-files?view=msvc-170
-            // EXPORTS - https://learn.microsoft.com/en-us/cpp/build/reference/exports?view=msvc-170
-            // Format: entryname[=internal_name|other_module.exported_name] [@ordinal [NONAME] ] [ [PRIVATE] | [DATA] ]
-
-
-            std::string name = trim(std::string(line, 0, pos));
-            std::string attr = marty_cpp::toUpper(trim(std::string(line, pos+1)));
-            if (attr=="DATA")
-            {
-                exportedData.insert(name);
-            }
-
-            proxyFunctionsList.emplace_back(name);
+            errInfo.errMsg = "export entry already exists: '" + me.entryName + "'";
+            return false;
         }
 
     }
@@ -631,6 +758,5 @@ bool parseOutputProxyFunctionsList( const std::string                 &functions
     return true;
 
 }
-
 
 

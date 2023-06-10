@@ -72,36 +72,144 @@ bool splitFunctionPointerDef( std::string    def
                             , FunctionInfo  &functionInfo
                             )
 {
-    std::string::size_type 
-    pos = def.find('(');
-    if (pos==def.npos)
-        return false;
+    std::string::size_type pos = def.npos;
 
-    functionInfo.retType.assign(def, 0, pos);
-    functionInfo.retType = normalizeTypeName(functionInfo.retType);
+    // 1)  void * (*sqlite3_aggregate_context)(sqlite3_context*,int nBytes);
+    // 2)  void * sqlite3_aggregate_context(sqlite3_context*,int nBytes);
 
-    def.erase(0, pos);
-    if (def.empty())
-        return false;
+    // В форме указателя можно указывать calling convention - оно само найдётся:
+    // void (WINAPI *Sleep)(...)
 
-    pos = def.find(')');
-    if (pos==def.npos)
-        return false;
+    // В виде прототипа это выглядит так:
+    // WINAPI void Sleep(...)
+    // И в этом случае нам надо знать, что WINAPI или какое-либо другое аналогичное ключевое слово/макрос - обозначает тип (вызова) функции
+    // Это надо как-то задавать снаружи. Пока не будем париться
 
-    std::string ptrTypeAndName = std::string(def, 0, pos+1);
-    def.erase(0, pos+1);
-    if (def.empty())
-        return false;
-    if (ptrTypeAndName.empty())
-        return false;
-    if (ptrTypeAndName.front()!='(' || ptrTypeAndName.back()!=')')
-        return false;
+    int prototypeMode = 0; // -1 - fn ptr (*name)(...);  0 - unknown; 1 - fn prototype name(...);
 
-    ptrTypeAndName.erase(ptrTypeAndName.size()-1);
-    ptrTypeAndName.erase(0, 1);
-    ptrTypeAndName = trim(ptrTypeAndName);
-    if (ptrTypeAndName.empty())
+    {
+        int      braceLevel   = 0;
+        unsigned bracePairCnt = 0;
+        for(auto ch: def)
+        {
+            if (ch=='(')
+            {
+                braceLevel++;
+                //if (braceLevel==0)
+            }
+            else if (ch==')')
+            {
+                braceLevel--;
+                if (braceLevel==0)
+                    bracePairCnt++;
+            }
+        }
+
+        switch(bracePairCnt)
+        {
+            case 0:
+                prototypeMode = 0; // unknown - ни одной пары скобок
+                break;
+
+            case 1:
+                prototypeMode = 1; // fn prototype - только одна пара скобок - определение в виде прототипа функции
+                break;
+        
+            case 2:
+                prototypeMode = -1; // fn ptr - две пары скобок
+                break;
+        
+            default: // 3+
+                prototypeMode = 0; // unknown
+        }
+    }
+
+    if (!prototypeMode)
+    {
         return false;
+    }
+
+    if (prototypeMode>0) // fn prototype
+    {
+        pos = def.find('('); // Ищем открывающую скобку - после неё идут аргументы
+        if (pos==def.npos)
+            return false;
+
+        std::string retTypeAndFnName = trim(std::string(def, 0, pos)); // До открывающей скобки - тип возвращаемого значения и имя функции
+        def.erase(0, pos);
+
+        pos = retTypeAndFnName.find_last_of("&*");
+
+        if (pos!=retTypeAndFnName.npos)
+        {
+            retTypeAndFnName.insert(pos+1, 1, ' ');
+        }
+
+        std::vector<std::string> v;
+        pos = retTypeAndFnName.find(' ');
+        while(pos!=retTypeAndFnName.npos)
+        {
+            v.emplace_back(trim(std::string(retTypeAndFnName, 0, pos)));
+            retTypeAndFnName.erase(0, pos+1);
+            retTypeAndFnName = trim(retTypeAndFnName);
+            pos = retTypeAndFnName.find(' ');
+        }
+
+        StringAppendWithSep sbRetType = StringAppendWithSep(" ");
+        for(const auto vv: v)
+        {
+            sbRetType.append(vv);
+        }    
+
+        functionInfo.retType = normalizeTypeName(sbRetType.toString());
+        functionInfo.ptrType = std::string();
+        functionInfo.name    = retTypeAndFnName;
+
+        // Разобрали прототип функции
+    }
+    else // fn ptr
+    {
+        pos = def.find('('); // Ищем открывающую скобку - в них заключен указатель на функцию
+        if (pos==def.npos)
+            return false;
+    
+        functionInfo.retType.assign(def, 0, pos); // До открывающей скобки - тип возвращаемого значения
+        functionInfo.retType = normalizeTypeName(functionInfo.retType);
+    
+        def.erase(0, pos);
+        if (def.empty())
+            return false;
+    
+        pos = def.find(')'); // ищем закрывающую скобку указателя на функцию
+        if (pos==def.npos)
+            return false;
+    
+        std::string ptrTypeAndName = std::string(def, 0, pos+1);
+        def.erase(0, pos+1);
+        if (def.empty())
+            return false;
+        if (ptrTypeAndName.empty())
+            return false;
+        if (ptrTypeAndName.front()!='(' || ptrTypeAndName.back()!=')')
+            return false;
+    
+        ptrTypeAndName.erase(ptrTypeAndName.size()-1);
+        ptrTypeAndName.erase(0, 1);
+        ptrTypeAndName = trim(ptrTypeAndName);
+        if (ptrTypeAndName.empty())
+            return false;
+
+        pos = ptrTypeAndName.find('*');
+        if (pos==def.npos)
+            return false;
+    
+        functionInfo.ptrType = trim(std::string(ptrTypeAndName, 0, pos));
+        functionInfo.name    = trim(std::string(ptrTypeAndName, pos+1));
+            
+        // Разобрали имя функции (в форме указателя)
+        // 
+    }
+
 
     if (def.back()==';')
         def.erase(def.size()-1);
@@ -112,13 +220,6 @@ bool splitFunctionPointerDef( std::string    def
         return false;
     def.erase(def.size()-1);
     def.erase(0, 1);
-
-    pos = ptrTypeAndName.find('*');
-    if (pos==def.npos)
-        return false;
-
-    functionInfo.ptrType = trim(std::string(ptrTypeAndName, 0, pos));
-    functionInfo.name    = trim(std::string(ptrTypeAndName, pos+1));
 
     static std::string braces = "(<[";
     std::vector<std::string> argStrings;
