@@ -199,6 +199,7 @@ int main( int argc, char* argv[] )
     auto printHelp = [](int res)
     {
         std::cerr << "Usage: gen ARGNAMES.INI CONFIG.INI PROTOTYPES_FILE FNLIST_FILE OUTPUTTYPE\n";
+        std::cerr << "OUTPUTTYPE: types|ellipsis|fntables|proxytypes|fnindexes|def|proxycode\n";
         return res;
     };
 
