@@ -81,9 +81,18 @@ bool splitFunctionPointerDef( std::string    def
     // void (WINAPI *Sleep)(...)
 
     // В виде прототипа это выглядит так:
-    // WINAPI void Sleep(...)
+    // void WINAPI Sleep(...)
+    // WINADVAPI LSTATUS APIENTRY RegOpenCurrentUser(__in REGSAM samDesired, __out PHKEY phkResult);
+    // #define WINAPI      __stdcall
+    // #define APIENTRY    WINAPI
+    // #define WINADVAPI DECLSPEC_IMPORT
+
     // И в этом случае нам надо знать, что WINAPI или какое-либо другое аналогичное ключевое слово/макрос - обозначает тип (вызова) функции
-    // Это надо как-то задавать снаружи. Пока не будем париться
+    // Это надо как-то задавать снаружи. Пока не будем париться, если надо задать тип конкретной функции - то делаем через форму с указателем
+
+    // Надо глобально задавать тип функций - для тех, где не задано, или для всех (потом)
+    // Пока не паримся, надо будет - доделаю
+
 
     int prototypeMode = 0; // -1 - fn ptr (*name)(...);  0 - unknown; 1 - fn prototype name(...);
 

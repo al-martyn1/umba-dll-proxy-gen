@@ -1,38 +1,212 @@
 #pragma once
 
+#include "umba/umba.h"
+//
+#include "umba/string_plus.h"
+#include "umba/macros.h"
+#include "umba/macro_helpers.h"
+
 #include "GenerationOptions.h"
 #include "InputData.h"
 #include "StringAppendWithSep.h"
 
+//----------------------------------------------------------------------------
 
-template<typename StreamType> inline
-bool generateEllipsisReport(StreamType &oss, ErrInfo &errInfo, const InputData &inputData, DllProxyGenerationOptions &proxyGenerationOptions)
+
+
+
+//----------------------------------------------------------------------------
+inline
+std::string getFillComplementString(std::size_t strLen, std::size_t complementToSize, char fillChar=' ')
 {
-    for(auto fi: inputData.functionInfos)
+    if (strLen>=complementToSize) // Дополнение не нужно, и так по длине хватает
     {
-       if (fi.hasEllipsisArg())
+        return std::string();
+    }
+
+    std::size_t nFill = complementToSize - strLen;
+
+    return std::string(nFill, fillChar);
+
+}
+
+//------------------------------
+inline
+std::string getFillComplementString(const std::string str, std::size_t complementTo, char fillChar=' ')
+{
+    return getFillComplementString(str.size(), complementTo, fillChar);
+}
+
+//----------------------------------------------------------------------------
+
+
+
+//----------------------------------------------------------------------------
+inline
+void setMacroValueMulticase(umba::macros::StringStringMap<std::string> &macros, const std::string &name, const std::string &value)
+{
+    macros[name] = value;
+    macros[marty_cpp::toUpper(name)] = marty_cpp::toUpper(value);
+    macros[marty_cpp::toLower(name)] = marty_cpp::toLower(value);
+}
+
+//------------------------------
+inline
+std::string substMacros( const std::string &tplStr, const umba::macros::StringStringMap<std::string> &macros )
+{
+    return 
+    umba::macros::substMacros( tplStr
+                             , umba::macros::MacroTextFromMapRef<std::string>(macros)
+                             , umba::macros::smf_KeepUnknownVars | umba::macros::smf_DisableRecursion
+                             );
+}
+
+//----------------------------------------------------------------------------
+
+
+
+//----------------------------------------------------------------------------
+template<typename StreamType> inline
+bool generateConfigDefs(StreamType &oss, ErrInfo &errInfo, const InputData &inputData, DllProxyGenerationOptions &pgo)
+{
+    unsigned cnt = 0;
+
+    auto generateConfigDefBool = [&](std::string optName, bool val)
+    {
+        std::string optFullName     = pgo.configDefPrefix + marty_cpp::toUpper(optName);
+        std::string optFullNameFill = getFillComplementString(optFullName, 48);
+
+        if (val)
+        {
+            oss << "#define " << optFullName; //  << "  "
+            //if (!pgo.configDefOnlyForActive)
+            {
+                oss << optFullNameFill << " 1";
+            }
+            oss << "\n";
+        }
+        else // not val
+        {
+            if (!pgo.configDefOnlyForActiveOption)
+            {
+                oss << "#define " << optFullName; //  << "  "
+                oss << optFullNameFill << " 0";
+                oss << "\n";
+            }
+        }
+    };
+
+    generateConfigDefBool("ForwardData"            , pgo.forwardData);
+    generateConfigDefBool("ForwardEllipsis"        , pgo.forwardEllipsis);
+    generateConfigDefBool("GenerateCustomHandler"  , pgo.generateCustomHandler);
+    // generateConfigDefBool("GenerateJumpEllipsis"   , pgo.generateJumpEllipsis);
+    // generateConfigDefBool("GenerateJumpAll"        , pgo.generateJumpAll);
+    // // generateConfigDefBool("" , pgo.);
+
+
+    oss << "\n";
+
+    return true;
+}
+
+//----------------------------------------------------------------------------
+
+
+
+//----------------------------------------------------------------------------
+template<typename StreamType> inline
+bool generateForwardReport(StreamType &oss, ErrInfo &errInfo, const InputData &inputData, DllProxyGenerationOptions &pgo)
+{
+    unsigned cnt = 0;
+    for(auto me: inputData.moduleEntries)
+    {
+       if (me.isForwardEntry())
        {
-           oss << "Ellipsis function: " << fi.name << "\n";
+           oss << "Forward entry: " << me.forwardFullName() << "\n";
+           ++cnt;
        }
+    }
+
+    if (!cnt)
+    {
+        oss << "<No forward entries found>\n";
     }
 
     return true;
 }
 
+//----------------------------------------------------------------------------
 
+
+
+//----------------------------------------------------------------------------
 template<typename StreamType> inline
-bool generateFunctionTables(StreamType &oss, ErrInfo &errInfo, const InputData &inputData, DllProxyGenerationOptions &proxyGenerationOptions)
+bool generateDataReport(StreamType &oss, ErrInfo &errInfo, const InputData &inputData, DllProxyGenerationOptions &pgo)
 {
-    std::vector<std::string> implNames = inputData.getImplementProxyNames( proxyGenerationOptions
+    unsigned cnt = 0;
+    for(auto me: inputData.moduleEntries)
+    {
+       if (me.isDataEntry())
+       {
+           oss << "Data entry: " << me.getInternalName() << "\n";
+           ++cnt;
+       }
+    }
+
+    if (!cnt)
+    {
+        oss << "<No data entries found>\n";
+    }
+
+    return true;
+}
+
+//----------------------------------------------------------------------------
+
+
+
+//----------------------------------------------------------------------------
+template<typename StreamType> inline
+bool generateEllipsisReport(StreamType &oss, ErrInfo &errInfo, const InputData &inputData, DllProxyGenerationOptions &pgo)
+{
+    unsigned cnt = 0;
+    for(auto fi: inputData.functionInfos)
+    {
+       if (fi.hasEllipsisArg())
+       {
+           oss << "Ellipsis function: " << fi.name << "\n";
+           ++cnt;
+       }
+    }
+
+    if (!cnt)
+    {
+        oss << "<No ellipsis functions found>\n";
+    }
+
+    return true;
+}
+
+//----------------------------------------------------------------------------
+
+
+
+//----------------------------------------------------------------------------
+template<typename StreamType> inline
+bool generateFunctionTables(StreamType &oss, ErrInfo &errInfo, const InputData &inputData, DllProxyGenerationOptions &pgo)
+{
+    std::vector<std::string> implNames = inputData.getImplementProxyNames( pgo
                                                                          , [&](const ModuleExportEntry &me)
                                                                            {
                                                                                return !me.isDataEntry();
                                                                            }
                                                                          );
 
-    oss << "FARPROC orgSqliteFuncPointers[" << implNames.size() << "] = { 0 };\n\n";
+    
+    // sqlite3orgFunc
+    oss << "FARPROC " << pgo.proxyImplArraysOrgNamePrefix << "Pointers[" << implNames.size() << "] = { 0 };\n\n";
 
-    oss << "const char* orgSqliteFuncNames[" << implNames.size() << "] =\n";
+    oss << "const char* " << pgo.proxyImplArraysOrgNamePrefix << "Names[" << implNames.size() << "] =\n";
 
     unsigned idx = (unsigned)-1;
     for(auto exportName: implNames)
@@ -70,16 +244,15 @@ bool generateFunctionTables(StreamType &oss, ErrInfo &errInfo, const InputData &
     return true;
 }
 
-inline
-std::string makeFnIdxConstant(std::string s)
-{
-    return std::string("ORG_SQLITE3_FN_IDX_") + marty_cpp::toUpper(s);
-};
+//----------------------------------------------------------------------------
 
+
+
+//----------------------------------------------------------------------------
 template<typename StreamType> inline
-bool generateProxyTypes(StreamType &oss, ErrInfo &errInfo, const InputData &inputData, DllProxyGenerationOptions &proxyGenerationOptions)
+bool generateProxyTypes(StreamType &oss, ErrInfo &errInfo, const InputData &inputData, DllProxyGenerationOptions &pgo)
 {
-    std::vector<std::string> implNames = inputData.getImplementProxyNames( proxyGenerationOptions
+    std::vector<std::string> implNames = inputData.getImplementProxyNames( pgo
                                                                          , [&](const ModuleExportEntry &me)
                                                                            {
                                                                                if (me.isDataEntry())
@@ -88,7 +261,6 @@ bool generateProxyTypes(StreamType &oss, ErrInfo &errInfo, const InputData &inpu
                                                                                return true;
                                                                            }
                                                                          );
-
     unsigned idx = (unsigned)-1;
     for(auto implName: implNames)
     {
@@ -113,8 +285,14 @@ bool generateProxyTypes(StreamType &oss, ErrInfo &errInfo, const InputData &inpu
 
         FnDefGenerateOptions fnDefGenerateOptions;
         clearArgNames(fi);
+
+        umba::macros::StringStringMap<std::string> macros;
+        setMacroValueMulticase(macros, "FunctionName", internalName);
+
+        std::string functionPtrType = substMacros(pgo.functionPtrTypeFormat, macros);
+
         std::string
-        generatedFunctionDef = generateFunctionDef(fi, true, "$(FunctionName)_fnptr_t", fnDefGenerateOptions);
+        generatedFunctionDef = generateFunctionDef(fi, true, functionPtrType, fnDefGenerateOptions);
         oss << "typedef " << generatedFunctionDef << ";\n";
     }
 
@@ -123,10 +301,15 @@ bool generateProxyTypes(StreamType &oss, ErrInfo &errInfo, const InputData &inpu
     return true;
 }
 
+//----------------------------------------------------------------------------
+
+
+
+//----------------------------------------------------------------------------
 template<typename StreamType> inline
-bool generateProxyIndexes(StreamType &oss, ErrInfo &errInfo, const InputData &inputData, DllProxyGenerationOptions &proxyGenerationOptions)
+bool generateProxyIndexes(StreamType &oss, ErrInfo &errInfo, const InputData &inputData, DllProxyGenerationOptions &pgo)
 {
-    std::vector<std::string> implNames = inputData.getImplementProxyNames( proxyGenerationOptions
+    std::vector<std::string> implNames = inputData.getImplementProxyNames( pgo
                                                                          , [&](const ModuleExportEntry &me)
                                                                            {
                                                                                return !me.isDataEntry();
@@ -137,7 +320,13 @@ bool generateProxyIndexes(StreamType &oss, ErrInfo &errInfo, const InputData &in
     for(auto exportName: implNames)
     {
         ++idx;
-        oss << "#define " << makeFnIdxConstant(exportName) << "        " << idx << "\n";
+
+        umba::macros::StringStringMap<std::string> macros;
+        setMacroValueMulticase(macros, "FunctionName", exportName);
+        std::string fnIdxConstantName = substMacros( pgo.functionIndexConstantNameFormat, macros );
+        std::string fillStr = getFillComplementString(fnIdxConstantName, 64);
+        
+        oss << "#define " << fnIdxConstantName << fillStr << " " << idx << "\n";
     }
 
     oss << "\n";
@@ -145,15 +334,20 @@ bool generateProxyIndexes(StreamType &oss, ErrInfo &errInfo, const InputData &in
     return true;
 }
 
+//----------------------------------------------------------------------------
+
+
+
+//----------------------------------------------------------------------------
 template<typename StreamType> inline
-bool generateDef(StreamType &oss, ErrInfo &errInfo, const InputData &inputData, DllProxyGenerationOptions &proxyGenerationOptions)
+bool generateDef(StreamType &oss, ErrInfo &errInfo, const InputData &inputData, DllProxyGenerationOptions &pgo)
 {
-    oss << "LIBRARY \"" << proxyGenerationOptions.dllTarget << "\"\n";
+    oss << "LIBRARY \"" << pgo.dllTarget << "\"\n";
     oss << "EXPORTS\n";
 
     for(const auto &me: inputData.moduleEntries)
     {
-        oss << "" << me.entryName;
+        oss << "  " << me.entryName;
         if (me.isForwardEntry())
         {
             std::string fwdTargetModule = me.otherModule;
@@ -199,10 +393,15 @@ bool generateDef(StreamType &oss, ErrInfo &errInfo, const InputData &inputData, 
     return true;
 }
 
+//----------------------------------------------------------------------------
+
+
+
+//----------------------------------------------------------------------------
 template<typename StreamType> inline
-bool generateProxyCode(StreamType &oss, ErrInfo &errInfo, const InputData &inputData, DllProxyGenerationOptions &proxyGenerationOptions)
+bool generateProxyCode(StreamType &oss, ErrInfo &errInfo, const InputData &inputData, DllProxyGenerationOptions &pgo)
 {
-    std::vector<std::string> implNames = inputData.getImplementProxyNames( proxyGenerationOptions
+    std::vector<std::string> implNames = inputData.getImplementProxyNames( pgo
                                                                          , [&](const ModuleExportEntry &me)
                                                                            {
                                                                                return true;
@@ -219,9 +418,18 @@ bool generateProxyCode(StreamType &oss, ErrInfo &errInfo, const InputData &input
             return false;
         }
 
+        umba::macros::StringStringMap<std::string> macros;
+        setMacroValueMulticase(macros, "FunctionName", implName);
+        setMacroValueMulticase(macros, "DataName"    , implName);
+
+
         if (me.isDataEntry())
         {
-            oss << "PROXY_DATA_EXPORT " << "PROXY_SQLITE3_" << marty_cpp::toUpper(implName) << "_DATA();\n\n";
+            std::string dataEntryText = substMacros(pgo.proxyDataFormat, macros);
+            if (!dataEntryText.empty())
+            {
+                oss << "" << dataEntryText << ";\n\n";
+            }
             continue;
         }
 
@@ -239,9 +447,9 @@ bool generateProxyCode(StreamType &oss, ErrInfo &errInfo, const InputData &input
 
 
         FnDefGenerateOptions fnDefGenerateOptions;
-        fnDefGenerateOptions.prototypePrefix = "PROXY_EXPORT";
+        fnDefGenerateOptions.prototypePrefix = pgo.proxyFunctionImplementationPrefix; //  "PROXY_EXPORT";
 
-        generateArgNames(fi, proxyGenerationOptions);
+        generateArgNames(fi, pgo);
 
         FunctionInfo fiClr = fi;
         clearArgNames(fiClr);
@@ -251,18 +459,33 @@ bool generateProxyCode(StreamType &oss, ErrInfo &errInfo, const InputData &input
         oss << "" << generatedFunctionDef << "\n";
         oss << "{\n";
 
-        oss << "    WHATSAPP_TRACE((\"Proxy called: %s\\n\", \"" << generateFunctionName(fi, "$(FunctionName)") << "\"));\n";
+
+        if (pgo.generateProxyHelo)
+        {
+            std::string proxyHelo = substMacros( pgo.proxyHelo, macros );
+            if (!proxyHelo.empty())
+            {
+                oss << "    " << proxyHelo << ";\n";
+            }
+        }
+
+        std::string functionPtrType = substMacros(pgo.functionPtrTypeFormat, macros);
+        std::string fnIdxConstantName = substMacros( pgo.functionIndexConstantNameFormat, macros );
 
         if (!fi.hasEllipsisArg())
         {
-            oss << "    " << generateFunctionName(fi, "$(FunctionName)_fnptr_t")
-                          << " orgFnPtr = getOriginalFunctionPtr<" << generateFunctionName(fi, "$(FunctionName)_fnptr_t") << ">("
-                          << makeFnIdxConstant(fi.name) << ");\n";
+            oss << "    " << functionPtrType // generateFunctionName(fi, "$(FunctionName)_fnptr_t")
+                          << " orgFnPtr = " << pgo.getOriginalFunctionPtrFuncTemplateName << "<" << functionPtrType /* generateFunctionName(fi, "$(FunctionName)_fnptr_t") */  << ">("
+                          << fnIdxConstantName << ");\n";
             oss << "    " << (fi.voidReturn() ? "" : "return ") << generateFunctionCall(fi, "orgFnPtr", fnDefGenerateOptions) << ";\n";
         }
         else
         {
-            oss << "    PROXY_" << marty_cpp::toUpper(implName) << "_IMPL();\n";
+            std::string ellipsisImpl = substMacros( pgo.ellipsisImplFormat, macros );
+            if (!ellipsisImpl.empty())
+            {
+                oss << "    " << ellipsisImpl << ";\n";
+            }
         }
 
         oss << "}\n\n";
@@ -274,5 +497,11 @@ bool generateProxyCode(StreamType &oss, ErrInfo &errInfo, const InputData &input
     return true;
 
 }
+
+//----------------------------------------------------------------------------
+
+
+
+//----------------------------------------------------------------------------
 
 

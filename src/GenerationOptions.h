@@ -8,20 +8,42 @@
 
 #include <string>
 
+//! Глобальные опции генерации кода для прокси DLL
 struct DllProxyGenerationOptions
 {
-    std::string dllTarget       ; //!< this dll name, no ext
-    std::string dllForwardTarget; //!< forward target, no ext
+    bool        configDefOnlyForActiveOption = false  ; //!< #define CONFIG_**OPT** 0/1 или просто #define CONFIG_**OPT** для включенных опций
+    std::string configDefPrefix                       ; //!< Префикс для генерируемых макросов условной компиляции с опциями генерации
 
-    bool forwardData                = false; //!< форвардим все данные
-    bool forwardEllipsis            = false; //!< форвардим все функции с элипсисом
+    std::string dllTarget                             ; //!< this dll name, no ext
+    std::string dllForwardTarget                      ; //!< forward target, no ext
 
-    bool generateJumpEllipsis       = false; //!< генерим JUMP вместо вызова оригинальной функции для функций с ELLIPSIS
-    bool generateJumpAll            = false; //!< генерим JUMP вместо вызова оригинальной функции для всех прокси
+    bool forwardData                = false           ; //!< форвардим все данные
+    bool forwardEllipsis            = false           ; //!< форвардим все функции с элипсисом
 
-    bool generateHelo               = false; //!< генерировать код "Proxy called"
-    bool generateCustomHandler      = false; //!< генерировать код пользовательских обработчиков через макросы #ifdef HANDLER HANDLER() #endif
+    std::string functionIndexConstantNameFormat       ; //!< Формат константы индекса функции
+    std::string ellipsisImplFormat                    ; //!< Формат вызова оригинальной функции (или какой-то замены) для функций с переменным числом аргументов
+    std::string functionPtrTypeFormat                 ; //!< Формат указателя на функцию
+    std::string getOriginalFunctionPtrFuncTemplateName;
+    std::string proxyFunctionImplementationPrefix     ; //!< Something as APIEXPORT etc, or keep it empty
+    std::string proxyDataFormat                       ; //!< Если DATA элементы не форвардятся в оригинальную DLL, то они реализовываются по этому шаблону
+    std::string proxyImplArraysOrgNamePrefix          ; //!< Префикс для orgFuncPointers/orgFuncNames etc
 
+    std::string proxyHelo                             ; //!< Код с макросами для генерации proxyHelo - однострочный
+    bool generateProxyHelo          = false           ; //!< Генерировать код "Proxy called"
+
+    // Пока не реализовано
+    std::string customHandler                         ; //!<
+    bool generateCustomHandler      = false           ; //!< Генерировать код пользовательских обработчиков через макросы #ifdef HANDLER HANDLER() #endif
+
+    // Пока не реализовано
+    bool generateJumpEllipsis       = false           ; //!< Генерим JUMP вместо вызова оригинальной функции для функций с ELLIPSIS
+    bool generateJumpAll            = false           ; //!< Генерим JUMP вместо вызова оригинальной функции для всех прокси
+
+
+    //! Имена (начальные) для различных типов параметров функций. 
+    /*! Используется для генерации имен параметров, если они не заданы в прототипе. 
+        К одинаковым именам добавляется номер при дублировании - lpcStr, lpcStr2, lpcStr3, ... 
+    */
     std::unordered_map<std::string,std::string> paramInitialNames;
 
 }; // struct DllProxyGenerationOptions
@@ -30,11 +52,7 @@ struct DllProxyGenerationOptions
 // За неимением гербовой пишем на простой
 // Нет полноценного разбора параметров ком строки - парсим инишку с параметрами
 
-// Примеры автогенерации имён параметров:
-// int sqlite3_autovacuum_pages(sqlite3* pDb, unsigned int (*pfn)(void*, const char*, unsigned int, unsigned int, unsigned int), void* pv, void (*pfn2)(void*))
-// int sqlite3_backup_finish(sqlite3_backup* pBckp)
-// sqlite3_backup* sqlite3_backup_init(sqlite3* pDb, const char* pcStr, sqlite3* pDb2, const char* pcStr2)
-
+//! Разбор INI с именами (начальными) параметров функций
 inline
 bool parseParamInitialNames( const std::string                &functionsListText
                            , ErrInfo                          &errInfo
@@ -93,6 +111,15 @@ bool parseParamInitialNames( const std::string                &functionsListText
 
 }
 
+// За неимением гербовой пишем на простой
+// Нет полноценного разбора параметров ком строки - парсим инишку с параметрами
+
+// Примеры автогенерации имён параметров:
+// int sqlite3_autovacuum_pages(sqlite3* pDb, unsigned int (*pfn)(void*, const char*, unsigned int, unsigned int, unsigned int), void* pv, void (*pfn2)(void*))
+// int sqlite3_backup_finish(sqlite3_backup* pBckp)
+// sqlite3_backup* sqlite3_backup_init(sqlite3* pDb, const char* pcStr, sqlite3* pDb2, const char* pcStr2)
+
+//! Разбор INI с глобальными опциями генерации кода для прокси DLL
 inline
 bool parseDllProxyGenerationOptions( const std::string                &functionsListText
                                    , ErrInfo                          &errInfo
@@ -129,7 +156,8 @@ bool parseDllProxyGenerationOptions( const std::string                &functions
             return false;
         }
 
-        std::string name  = marty_cpp::toUpper(trim(std::string(line, 0, pos)));
+        std::string orgName  = trim(std::string(line, 0, pos));
+        std::string name  = marty_cpp::toUpper(orgName);
         std::string value = trim(std::string(line, pos+1));
 
         auto fromBool = [&](std::string s, bool &res)
@@ -166,13 +194,30 @@ bool parseDllProxyGenerationOptions( const std::string                &functions
         
         bool boolVal = false;
 
-        if (name=="DLL")
+
+        if (name=="CONFIGDEFPREFIX") // ConfigDefPrefix
+        {
+            pgo.configDefPrefix = value;
+            continue;
+        }
+        if (name=="CONFIGDEFONLYFORACTIVEOPTION")
+        {
+            if (!fromBool(value, boolVal))
+            {
+                return setInvalidMsg("ConfigDefOnlyForActiveOption");
+            }
+
+            pgo.configDefOnlyForActiveOption = boolVal;
+            continue;
+        }
+
+        if (name=="DLL" || name=="TARGET" || name=="TARGETDLL") // TargetDll
         {
             pgo.dllTarget = value;
             continue;
         }
 
-        if (name=="FORWARDTARGET")
+        if (name=="FORWARDTARGET") // ForwardTarget
         {
             pgo.dllForwardTarget = value;
             continue;
@@ -200,7 +245,86 @@ bool parseDllProxyGenerationOptions( const std::string                &functions
             continue;
         }
 
-        return setUnknownMsg(name);
+        if (name=="FUNCTIONINDEXCONSTANTNAMEFORMAT") // FunctionIndexConstantNameFormat
+        {
+            pgo.functionIndexConstantNameFormat = value;
+            continue;
+        }
+
+        if (name=="ELLIPSISIMPLFORMAT") // EllipsisImplFormat
+        {
+            pgo.ellipsisImplFormat = value;
+            continue;
+        }
+
+        if (name=="FUNCTIONPTRTYPEFORMAT") // FunctionPtrTypeFormat
+        {
+            pgo.functionPtrTypeFormat = value;
+            continue;
+        }
+
+        if (name=="GETORIGINALFUNCTIONPTRFUNCTEMPLATENAME") // GetOriginalFunctionPtrFuncTemplateName
+        {
+            pgo.getOriginalFunctionPtrFuncTemplateName = value;
+            continue;
+        }
+
+        if (name=="PROXYFUNCTIONIMPLEMENTATIONPREFIX") // ProxyFunctionImplementationPrefix
+        {
+            pgo.proxyFunctionImplementationPrefix = value;
+            continue;
+        }
+
+        if (name=="PROXYDATAFORMAT") // ProxyDataFormat
+        {
+            pgo.proxyDataFormat = value;
+            continue;
+        }
+
+        if (name=="PROXYIMPLARRAYSORGNAMEPREFIX") // ProxyImplArraysOrgNamePrefix
+        {
+            pgo.proxyImplArraysOrgNamePrefix = value;
+            continue;
+        }
+
+
+
+
+        if (name=="PROXYHELO") // ProxyHelo
+        {
+            pgo.proxyHelo = value;
+            continue;
+        }
+        if (name=="GENERATEPROXYHELO")
+        {
+            if (!fromBool(value, boolVal))
+            {
+                return setInvalidMsg("GenerateProxyHelo");
+            }
+
+            pgo.generateProxyHelo = boolVal;
+            continue;
+        }
+
+
+        if (name=="CUSTOMHANDLER") // CustomHandler
+        {
+            pgo.customHandler = value;
+            continue;
+        }
+        if (name=="GENERATECUSTOMHANDLER")
+        {
+            if (!fromBool(value, boolVal))
+            {
+                return setInvalidMsg("GenerateCustomHandler");
+            }
+
+            pgo.generateCustomHandler = boolVal;
+            continue;
+        }
+
+
+        return setUnknownMsg(orgName);
 
     #if 0
     bool generateJumpEllipsis       = false; //!< генерим JUMP вместо вызова оригинальной функции для функций с ELLIPSIS

@@ -245,13 +245,13 @@ int main( int argc, char* argv[] )
     std::string initialNamesText;
     if (!umba::filesys::readFile(initialNamesFilename, initialNamesText))
     {
-        std::cout << "failed to read initial names file\n";
+        std::cerr << "failed to read initial names file '" << errInfo.fileName << "'\n";
         return 1;
     }
 
     if (!parseParamInitialNames(initialNamesText, errInfo, proxyGenerationOptions))
     {
-        std::cout << errInfo.errMsg << " in line " << errInfo.lineNo << "\n";
+        std::cerr << errInfo.errMsg << " in line " << errInfo.lineNo << " of '" << errInfo.fileName << "'\n";
         return 1;
     }
 
@@ -261,13 +261,13 @@ int main( int argc, char* argv[] )
     std::string iniText;
     if (!umba::filesys::readFile(iniFilename, iniText))
     {
-        std::cout << "failed to read ini file\n";
+        std::cerr << "failed to read ini file '" << errInfo.fileName << "'\n";
         return 1;
     }
 
     if (!parseDllProxyGenerationOptions(iniText, errInfo, proxyGenerationOptions))
     {
-        std::cout << errInfo.errMsg << " in line " << errInfo.lineNo << "\n";
+        std::cerr << errInfo.errMsg << " in line " << errInfo.lineNo << " of '" << errInfo.fileName << "'\n";
         return 1;
     }
 
@@ -277,13 +277,13 @@ int main( int argc, char* argv[] )
     std::string fileText;
     if (!umba::filesys::readFile(prototypesFilename, fileText))
     {
-        std::cout << "failed to read prototypes file\n";
+        std::cerr << "failed to read prototypes file '" << errInfo.fileName << "'\n";
         return 1;
     }
 
     if (!parsePrototypes(fileText, errInfo, inputData))
     {
-        std::cout << errInfo.errMsg << " in line " << errInfo.lineNo << "\n";
+        std::cerr << errInfo.errMsg << " in line " << errInfo.lineNo << " of '" << errInfo.fileName << "'\n";
         return 1;
     }
 
@@ -293,13 +293,13 @@ int main( int argc, char* argv[] )
     std::string proxyFunctionsFileText;
     if (!umba::filesys::readFile(proxyFunctionsFilename, proxyFunctionsFileText))
     {
-        std::cout << "failed to read prototypes file\n";
+        std::cerr << "failed to read prototypes file '" << errInfo.fileName << "'\n";
         return 1;
     }
 
     if (!parseOutputProxyFunctionsList(proxyFunctionsFileText, errInfo, inputData))
     {
-        std::cout << errInfo.errMsg << " in line " << errInfo.lineNo << "\n";
+        std::cerr << errInfo.errMsg << " in line " << errInfo.lineNo << " of '" << errInfo.fileName << "'\n";
         return 1;
     }
 
@@ -363,6 +363,12 @@ int main( int argc, char* argv[] )
     // proxyGenerationOptions.forwardEllipsis   = true;
     //  
 
+    auto returnErrMsg = [&](int code)
+    {
+        std::cout << errInfo.errMsg << "\n";
+        std::cerr << errInfo.errMsg << "\n";
+        return code;
+    };
     
     inputData.updateForwards(proxyGenerationOptions);
 
@@ -372,7 +378,6 @@ int main( int argc, char* argv[] )
         {
             std::cout << foundType << "\n";
         }
-
 
         std::vector<std::string> noInitialNameList;
         const auto &paramInitialNames = proxyGenerationOptions.paramInitialNames;
@@ -395,59 +400,50 @@ int main( int argc, char* argv[] )
             }
         }
     }
+    else if (outputType=="config")
+    {
+        if (!generateConfigDefs(std::cout, errInfo, inputData, proxyGenerationOptions))
+            return returnErrMsg(1);
+    }
     else if (outputType=="ellipsis")
     {
         if (!generateEllipsisReport(std::cout, errInfo, inputData, proxyGenerationOptions))
-        {
-            std::cout << errInfo.errMsg << "\n";
-            std::cerr << errInfo.errMsg << "\n";
-            return 1;
-        }
+            return returnErrMsg(1);
+    }
+    else if (outputType=="data")
+    {
+        if (!generateDataReport(std::cout, errInfo, inputData, proxyGenerationOptions))
+            return returnErrMsg(1);
+    }
+    else if (outputType=="forward")
+    {
+        if (!generateForwardReport(std::cout, errInfo, inputData, proxyGenerationOptions))
+            return returnErrMsg(1);
     }
     else if (outputType=="fntables")
     {
         if (!generateFunctionTables(std::cout, errInfo, inputData, proxyGenerationOptions))
-        {
-            std::cout << errInfo.errMsg << "\n";
-            std::cerr << errInfo.errMsg << "\n";
-            return 1;
-        }
+            return returnErrMsg(1);
     }
     else if (outputType=="proxytypes")
     {
         if (!generateProxyTypes(std::cout, errInfo, inputData, proxyGenerationOptions))
-        {
-            std::cout << errInfo.errMsg << "\n";
-            std::cerr << errInfo.errMsg << "\n";
-            return 1;
-        }
+            return returnErrMsg(1);
     }
     else if (outputType=="fnindexes")
     {
         if (!generateProxyIndexes(std::cout, errInfo, inputData, proxyGenerationOptions))
-        {
-            std::cout << errInfo.errMsg << "\n";
-            std::cerr << errInfo.errMsg << "\n";
-            return 1;
-        }
+            return returnErrMsg(1);
     }
     else if (outputType=="def")
     {
         if (!generateDef(std::cout, errInfo, inputData, proxyGenerationOptions))
-        {
-            std::cout << errInfo.errMsg << "\n";
-            std::cerr << errInfo.errMsg << "\n";
-            return 1;
-        }
+            return returnErrMsg(1);
     }
     else if (outputType=="proxycode")
     {
         if (!generateProxyCode(std::cout, errInfo, inputData, proxyGenerationOptions))
-        {
-            std::cout << errInfo.errMsg << "\n";
-            std::cerr << errInfo.errMsg << "\n";
-            return 1;
-        }
+            return returnErrMsg(1);
     }
 
     /*

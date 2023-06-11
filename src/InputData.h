@@ -36,6 +36,11 @@ struct ModuleExportEntry
         return !otherModule.empty() && !exportedName.empty();
     }
 
+    std::string forwardFullName() const
+    {
+        return otherModule + "." + exportedName;
+    }
+
     // Для не ForwardEntry
     std::string getInternalName() const
     {
