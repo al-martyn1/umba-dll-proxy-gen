@@ -17,8 +17,13 @@ struct DllProxyGenerationOptions
     std::string dllTarget                             ; //!< this dll name, no ext
     std::string dllForwardTarget                      ; //!< forward target, no ext
 
+    // Все форварды также служат исключениями при генерации перехватов
+    // Чтобы отдельно не задавать - это аналогично тому, как при генерации прокси DLL
+    // для них не генерится код прокси функции
     bool forwardData                = false           ; //!< форвардим все данные
     bool forwardEllipsis            = false           ; //!< форвардим все функции с элипсисом
+    std::unordered_set<std::string> forwardList       ; //!< набор имён для форварда
+
 
     std::string functionIndexConstantNameFormat       ; //!< Формат константы индекса функции
     std::string ellipsisImplFormat                    ; //!< Формат вызова оригинальной функции (или какой-то замены) для функций с переменным числом аргументов
@@ -156,7 +161,16 @@ bool parseDllProxyGenerationOptions( const std::string                &functions
             return false;
         }
 
-        std::string orgName  = trim(std::string(line, 0, pos));
+        bool appendMode = false;
+
+        std::string paramName = std::string(line, 0, pos);
+        if (!paramName.empty() && paramName.back()=='+')
+        {
+            appendMode = true;
+            paramName.erase(paramName.size()-1, 1);
+        }
+
+        std::string orgName  = trim(paramName);
         std::string name  = marty_cpp::toUpper(orgName);
         std::string value = trim(std::string(line, pos+1));
 
@@ -244,6 +258,23 @@ bool parseDllProxyGenerationOptions( const std::string                &functions
             pgo.forwardEllipsis = boolVal;
             continue;
         }
+
+        if (name=="FORWARDLIST") // ForwardList
+        {
+            std::vector<std::string> lst = umba::string_plus::split(value, ',', true /* skipEmpty */ );
+            if (!appendMode)
+            {
+                pgo.forwardList.clear();
+            }
+
+            for(auto l: lst)
+            {
+                pgo.forwardList.insert(trim(l));
+            }
+
+            continue;
+        }
+
 
         if (name=="FUNCTIONINDEXCONSTANTNAMEFORMAT") // FunctionIndexConstantNameFormat
         {

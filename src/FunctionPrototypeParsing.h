@@ -70,6 +70,7 @@ bool splitFunctionArgDef( std::string       def
 
 bool splitFunctionPointerDef( std::string    def
                             , FunctionInfo  &functionInfo
+                            , bool           forcePtrMode = false
                             )
 {
     std::string::size_type pos = def.npos;
@@ -96,6 +97,12 @@ bool splitFunctionPointerDef( std::string    def
 
     int prototypeMode = 0; // -1 - fn ptr (*name)(...);  0 - unknown; 1 - fn prototype name(...);
 
+    if (forcePtrMode)
+    {
+        // Only function pounters allowed
+        prototypeMode = -1;
+    }
+    else
     {
         int      braceLevel   = 0;
         unsigned bracePairCnt = 0;
@@ -349,7 +356,7 @@ bool splitFunctionArgDef( std::string       def
     else // function ptr
     {
         //FunctionInfo  functionInfo;
-        bool parseRes = splitFunctionPointerDef( def, argInfo.fnPointerType);
+        bool parseRes = splitFunctionPointerDef( def, argInfo.fnPointerType, true /* forcePtrMode */ );
         if (!parseRes)
             return false;
 

@@ -1,7 +1,10 @@
-@cls
+@rem cls
+@echo.
+@echo.
+@echo.
 
 @if not exist .generated_res mkdir .generated_res
-@set GEN=.out\msvc2019\x64\Debug\sqlite3-gen.exe
+@set GEN=.out\msvc2019\x64\Debug\umba-dll-proxy-gen.exe
 
 @rem set GENERATEDBASE=.generated_res\
 @set GENERATEDBASE=

@@ -98,9 +98,16 @@ struct InputData
                 continue;
             }
 
+            auto internalName = me.getInternalName();
+            if (pgo.forwardList.find(internalName)!=pgo.forwardList.end())
+            {
+                // Форвардим по заданному списку
+                me.updateToForwardEntry(pgo.dllForwardTarget);
+            }
+
             FunctionInfo fi;
              
-            if (!getFunctionInfoByName(me.getInternalName(), fi))
+            if (!getFunctionInfoByName(internalName, fi))
                 continue;
 
             if (fi.hasEllipsisArg())
