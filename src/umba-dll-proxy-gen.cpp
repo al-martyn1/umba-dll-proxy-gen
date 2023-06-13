@@ -445,6 +445,33 @@ int main( int argc, char* argv[] )
         if (!generateProxyCode(std::cout, errInfo, inputData, proxyGenerationOptions))
             return returnErrMsg(1);
     }
+    else if (outputType=="hookcode")
+    {
+        if (!generateHookCode(std::cout, errInfo, inputData, proxyGenerationOptions))
+            return returnErrMsg(1);
+    }
+    else if (outputType=="hookinitcode")
+    {
+        // Есть массив имён
+        // Есть массив указателей на функции
+
+        // sqlite3orgFuncXXX[IDX] = getOriginalFunctionPtr;
+        // DetourAttach(&(PVOID&)sqlite3orgFuncXXX[IDX], hook_XXX);
+        
+        //     
+        //DetourAttach(&(PVOID&)TrueTarget, (PVOID)Extend);
+        //DetourDetach(&(PVOID&)TrueTarget, (PVOID)Extend);
+
+        if (!generateHookInitCode(std::cout, errInfo, inputData, proxyGenerationOptions))
+             return returnErrMsg(1);
+    }
+    else if (outputType=="hookdeinitcode")
+    {
+        if (!generateHookDeinitCode(std::cout, errInfo, inputData, proxyGenerationOptions))
+             return returnErrMsg(1);
+    }
+
+
 
     /*
     Ellipsis function: mprintf       - vmprintf

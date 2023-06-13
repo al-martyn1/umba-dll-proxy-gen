@@ -29,15 +29,18 @@ struct DllProxyGenerationOptions
     std::string ellipsisImplFormat                    ; //!< Формат вызова оригинальной функции (или какой-то замены) для функций с переменным числом аргументов
     std::string functionPtrTypeFormat                 ; //!< Формат указателя на функцию
     std::string getOriginalFunctionPtrFuncTemplateName;
+    std::string getOriginalFunctionPtrFuncName;
     std::string proxyFunctionImplementationPrefix     ; //!< Something as APIEXPORT etc, or keep it empty
     std::string proxyDataFormat                       ; //!< Если DATA элементы не форвардятся в оригинальную DLL, то они реализовываются по этому шаблону
-    std::string proxyImplArraysOrgNamePrefix          ; //!< Префикс для orgFuncPointers/orgFuncNames etc
+    std::string proxyImplArrayNamesPrefix             ; //!< Префикс для orgFuncPointers/orgFuncNames etc
+
+    std::string hookFunctionNameFormat                ; //!< Имя функции хука
 
     std::string proxyHelo                             ; //!< Код с макросами для генерации proxyHelo - однострочный
     bool generateProxyHelo          = false           ; //!< Генерировать код "Proxy called"
 
     // Пока не реализовано
-    std::string customHandler                         ; //!<
+    std::string customHandlerFormat                   ; //!<
     bool generateCustomHandler      = false           ; //!< Генерировать код пользовательских обработчиков через макросы #ifdef HANDLER HANDLER() #endif
 
     // Пока не реализовано
@@ -300,6 +303,12 @@ bool parseDllProxyGenerationOptions( const std::string                &functions
             continue;
         }
 
+        if (name=="GETORIGINALFUNCTIONPTRFUNCNAME") // GetOriginalFunctionPtrFuncName
+        {
+            pgo.getOriginalFunctionPtrFuncName = value;
+            continue;
+        }
+
         if (name=="PROXYFUNCTIONIMPLEMENTATIONPREFIX") // ProxyFunctionImplementationPrefix
         {
             pgo.proxyFunctionImplementationPrefix = value;
@@ -312,9 +321,9 @@ bool parseDllProxyGenerationOptions( const std::string                &functions
             continue;
         }
 
-        if (name=="PROXYIMPLARRAYSORGNAMEPREFIX") // ProxyImplArraysOrgNamePrefix
+        if (name=="PROXYIMPLARRAYNAMESPREFIX") // ProxyImplArrayNamesPrefix
         {
-            pgo.proxyImplArraysOrgNamePrefix = value;
+            pgo.proxyImplArrayNamesPrefix = value;
             continue;
         }
 
@@ -338,9 +347,9 @@ bool parseDllProxyGenerationOptions( const std::string                &functions
         }
 
 
-        if (name=="CUSTOMHANDLER") // CustomHandler
+        if (name=="CUSTOMHANDLERFORMAT") // CustomHandlerFormat
         {
-            pgo.customHandler = value;
+            pgo.customHandlerFormat = value;
             continue;
         }
         if (name=="GENERATECUSTOMHANDLER")
@@ -353,6 +362,14 @@ bool parseDllProxyGenerationOptions( const std::string                &functions
             pgo.generateCustomHandler = boolVal;
             continue;
         }
+
+        if (name=="HOOKFUNCTIONNAMEFORMAT") // HookFunctionNameFormat
+        {
+            pgo.hookFunctionNameFormat = value;
+            continue;
+        }
+
+        
 
 
         return setUnknownMsg(orgName);

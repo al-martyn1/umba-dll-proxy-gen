@@ -204,9 +204,9 @@ bool generateFunctionTables(StreamType &oss, ErrInfo &errInfo, const InputData &
 
     
     // sqlite3orgFunc
-    oss << "FARPROC " << pgo.proxyImplArraysOrgNamePrefix << "Pointers[" << implNames.size() << "] = { 0 };\n\n";
+    oss << "FARPROC " << pgo.proxyImplArrayNamesPrefix << "Pointers[" << implNames.size() << "] = { 0 };\n\n";
 
-    oss << "const char* " << pgo.proxyImplArraysOrgNamePrefix << "Names[" << implNames.size() << "] =\n";
+    oss << "const char* " << pgo.proxyImplArrayNamesPrefix << "Names[" << implNames.size() << "] =\n";
 
     unsigned idx = (unsigned)-1;
     for(auto exportName: implNames)
@@ -469,14 +469,21 @@ bool generateProxyCode(StreamType &oss, ErrInfo &errInfo, const InputData &input
             }
         }
 
-        std::string functionPtrType = substMacros(pgo.functionPtrTypeFormat, macros);
+        std::string functionPtrType   = substMacros(pgo.functionPtrTypeFormat, macros);
         std::string fnIdxConstantName = substMacros( pgo.functionIndexConstantNameFormat, macros );
+        std::string customHandler     = substMacros(pgo.customHandlerFormat, macros);
 
         if (!fi.hasEllipsisArg())
         {
             oss << "    " << functionPtrType // generateFunctionName(fi, "$(FunctionName)_fnptr_t")
                           << " orgFnPtr = " << pgo.getOriginalFunctionPtrFuncTemplateName << "<" << functionPtrType /* generateFunctionName(fi, "$(FunctionName)_fnptr_t") */  << ">("
                           << fnIdxConstantName << ");\n";
+            if (pgo.generateCustomHandler && !customHandler.empty())
+            {
+                oss << "    #if defined(" << customHandler << ")\n";
+                oss << "        " << customHandler << "();\n";
+                oss << "    #endif\n";
+            }
             oss << "    " << (fi.voidReturn() ? "" : "return ") << generateFunctionCall(fi, "orgFnPtr", fnDefGenerateOptions) << ";\n";
         }
         else
@@ -497,6 +504,264 @@ bool generateProxyCode(StreamType &oss, ErrInfo &errInfo, const InputData &input
     return true;
 
 }
+
+//----------------------------------------------------------------------------
+template<typename StreamType> inline
+bool generateHookCode(StreamType &oss, ErrInfo &errInfo, const InputData &inputData, DllProxyGenerationOptions &pgo)
+{
+    std::vector<std::string> implNames = inputData.getImplementProxyNames( pgo
+                                                                         , [&](const ModuleExportEntry &me)
+                                                                           {
+                                                                               if (me.isDataEntry())
+                                                                                   return false;
+                                                                               return true;
+                                                                           }
+                                                                         );
+
+    unsigned idx = (unsigned)-1;
+    for(auto implName: implNames)
+    {
+        ModuleExportEntry me;
+        if (!inputData.getModuleExportEntryByName(implName, me))
+        {
+            errInfo.errMsg = "entry info not found for export entry '" + implName + "'";
+            return false;
+        }
+        if (me.isDataEntry())
+        {
+            errInfo.errMsg = "can't hook data entry, name '" + implName + "'";
+            return false;
+        }
+
+        umba::macros::StringStringMap<std::string> macros;
+        setMacroValueMulticase(macros, "FunctionName", implName);
+        setMacroValueMulticase(macros, "DataName"    , implName);
+
+
+        std::string internalName = me.getInternalName();
+
+        FunctionInfo fi;
+
+        if (!inputData.getFunctionInfoByName(internalName, fi))
+        {
+            errInfo.errMsg = "function '" + internalName + "' not found for entry '" + me.entryName + "'";
+            return false;
+        }
+
+        ++idx;
+
+
+        FnDefGenerateOptions fnDefGenerateOptions;
+        fnDefGenerateOptions.prototypePrefix = pgo.proxyFunctionImplementationPrefix; //  "PROXY_EXPORT";
+
+        generateArgNames(fi, pgo);
+
+        FunctionInfo fiClr = fi;
+        clearArgNames(fiClr);
+
+        
+
+        std::string
+        generatedFunctionDef = generateFunctionDef(fi, false, pgo.hookFunctionNameFormat /* "$(FunctionName)" */ , fnDefGenerateOptions);
+        oss << "" << generatedFunctionDef << "\n";
+        oss << "{\n";
+
+
+        if (pgo.generateProxyHelo)
+        {
+            std::string proxyHelo = substMacros( pgo.proxyHelo, macros );
+            if (!proxyHelo.empty())
+            {
+                oss << "    " << proxyHelo << ";\n";
+            }
+        }
+
+        std::string functionPtrType   = substMacros(pgo.functionPtrTypeFormat, macros);
+        std::string fnIdxConstantName = substMacros( pgo.functionIndexConstantNameFormat, macros );
+        std::string customHandler     = substMacros(pgo.customHandlerFormat, macros);
+
+        if (!fi.hasEllipsisArg())
+        {
+            oss << "    " << functionPtrType // generateFunctionName(fi, "$(FunctionName)_fnptr_t")
+                          << " orgFnPtr = " << pgo.getOriginalFunctionPtrFuncTemplateName << "<" << functionPtrType /* generateFunctionName(fi, "$(FunctionName)_fnptr_t") */  << ">("
+                          << fnIdxConstantName << ");\n";
+            if (pgo.generateCustomHandler && !customHandler.empty())
+            {
+                oss << "    #if defined(" << customHandler << ")\n";
+                oss << "        " << customHandler << "();\n";
+                oss << "    #endif\n";
+            }
+            oss << "    " << (fi.voidReturn() ? "" : "return ") << generateFunctionCall(fi, "orgFnPtr", fnDefGenerateOptions) << ";\n";
+        }
+        else
+        {
+            std::string ellipsisImpl = substMacros( pgo.ellipsisImplFormat, macros );
+            if (!ellipsisImpl.empty())
+            {
+                oss << "    " << ellipsisImpl << ";\n";
+            }
+        }
+
+        oss << "}\n\n";
+
+    }
+
+    oss << "\n";
+
+    return true;
+
+}
+
+//----------------------------------------------------------------------------
+template<typename StreamType> inline
+bool generateHookInitCode(StreamType &oss, ErrInfo &errInfo, const InputData &inputData, DllProxyGenerationOptions &pgo)
+{
+    std::vector<std::string> implNames = inputData.getImplementProxyNames( pgo
+                                                                         , [&](const ModuleExportEntry &me)
+                                                                           {
+                                                                               if (me.isDataEntry())
+                                                                                   return false;
+                                                                               return true;
+                                                                           }
+                                                                         );
+    oss << "DetourTransactionBegin();\n";
+    oss << "DetourUpdateThread(GetCurrentThread());\n\n";
+
+
+    unsigned idx = (unsigned)-1;
+    for(auto implName: implNames)
+    {
+        ModuleExportEntry me;
+        if (!inputData.getModuleExportEntryByName(implName, me))
+        {
+            errInfo.errMsg = "entry info not found for export entry '" + implName + "'";
+            return false;
+        }
+        if (me.isDataEntry())
+        {
+            errInfo.errMsg = "can't hook data entry, name '" + implName + "'";
+            return false;
+        }
+
+        umba::macros::StringStringMap<std::string> macros;
+        setMacroValueMulticase(macros, "FunctionName", implName);
+        setMacroValueMulticase(macros, "DataName"    , implName);
+
+
+        std::string internalName = me.getInternalName();
+
+        FunctionInfo fi;
+
+        if (!inputData.getFunctionInfoByName(internalName, fi))
+        {
+            errInfo.errMsg = "function '" + internalName + "' not found for entry '" + me.entryName + "'";
+            return false;
+        }
+
+        ++idx;
+
+
+        FnDefGenerateOptions fnDefGenerateOptions;
+        fnDefGenerateOptions.prototypePrefix = pgo.proxyFunctionImplementationPrefix; //  "PROXY_EXPORT";
+
+        generateArgNames(fi, pgo);
+
+        FunctionInfo fiClr = fi;
+        clearArgNames(fiClr);
+
+        std::string fnIdxConstantName = substMacros( pgo.functionIndexConstantNameFormat, macros );
+        std::string hookFunctionName  = substMacros( pgo.hookFunctionNameFormat, macros );
+
+
+        oss << pgo.proxyImplArrayNamesPrefix << "Pointers[" << fnIdxConstantName << "] = " << pgo.getOriginalFunctionPtrFuncName << "(" << fnIdxConstantName << ");\n";
+        oss << "DetourAttach(&(PVOID&)" << pgo.proxyImplArrayNamesPrefix << "Pointers[" << fnIdxConstantName << "], (PVOID)" << hookFunctionName << ");\n\n";
+
+    }
+
+    oss << "\n";
+    oss << "DetourTransactionCommit();\n\n";
+
+    return true;
+
+}
+
+//----------------------------------------------------------------------------
+template<typename StreamType> inline
+bool generateHookDeinitCode(StreamType &oss, ErrInfo &errInfo, const InputData &inputData, DllProxyGenerationOptions &pgo)
+{
+    std::vector<std::string> implNames = inputData.getImplementProxyNames( pgo
+                                                                         , [&](const ModuleExportEntry &me)
+                                                                           {
+                                                                               if (me.isDataEntry())
+                                                                                   return false;
+                                                                               return true;
+                                                                           }
+                                                                         );
+    oss << "DetourTransactionBegin();\n";
+    oss << "DetourUpdateThread(GetCurrentThread());\n\n";
+
+
+    unsigned idx = (unsigned)-1;
+    for(auto implName: implNames)
+    {
+        ModuleExportEntry me;
+        if (!inputData.getModuleExportEntryByName(implName, me))
+        {
+            errInfo.errMsg = "entry info not found for export entry '" + implName + "'";
+            return false;
+        }
+        if (me.isDataEntry())
+        {
+            errInfo.errMsg = "can't hook data entry, name '" + implName + "'";
+            return false;
+        }
+
+        umba::macros::StringStringMap<std::string> macros;
+        setMacroValueMulticase(macros, "FunctionName", implName);
+        setMacroValueMulticase(macros, "DataName"    , implName);
+
+
+        std::string internalName = me.getInternalName();
+
+        FunctionInfo fi;
+
+        if (!inputData.getFunctionInfoByName(internalName, fi))
+        {
+            errInfo.errMsg = "function '" + internalName + "' not found for entry '" + me.entryName + "'";
+            return false;
+        }
+
+        ++idx;
+
+
+        FnDefGenerateOptions fnDefGenerateOptions;
+        fnDefGenerateOptions.prototypePrefix = pgo.proxyFunctionImplementationPrefix; //  "PROXY_EXPORT";
+
+        generateArgNames(fi, pgo);
+
+        FunctionInfo fiClr = fi;
+        clearArgNames(fiClr);
+
+        std::string fnIdxConstantName = substMacros( pgo.functionIndexConstantNameFormat, macros );
+        std::string hookFunctionName  = substMacros( pgo.hookFunctionNameFormat, macros );
+
+
+        // oss << pgo.proxyImplArrayNamesPrefix << "Pointers[" << fnIdxConstantName << "] = " << pgo.getOriginalFunctionPtrFuncTemplateName << "(" << fnIdxConstantName << ");\n";
+        oss << "DetourDetach(&(PVOID&)" << pgo.proxyImplArrayNamesPrefix << "Pointers[" << fnIdxConstantName << "], (PVOID)" << hookFunctionName << ");\n\n";
+
+    }
+
+    oss << "\n";
+    oss << "DetourTransactionCommit();\n\n";
+
+    return true;
+
+}
+
+//----------------------------------------------------------------------------
+
+
+
 
 //----------------------------------------------------------------------------
 
