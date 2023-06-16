@@ -183,16 +183,18 @@ int main( int argc, char* argv[] )
     #if defined(WIN32) || defined(_WIN32)
     if (IsDebuggerPresent())
     {
-        initialNamesFilename   = "../data/initial_names.txt";
-        iniFilename            = "../proxy.ini";
-        prototypesFilename     = "../data/sqlite_prototypes.txt";
-        proxyFunctionsFilename = "../data/sqlite_proxy_functions_list.txt";
+        initialNamesFilename   = "../data/initial_names.ini";
+        iniFilename            = "../data/kernel32.ini";
+        prototypesFilename     = "../data/kernel32_prototypes.txt";
+        proxyFunctionsFilename = "../data/kernel32_hook_list.txt";
         //outputType             = "fnindexes";
         //outputType             = "fntables";
         //outputType             = "proxyfns";
-        outputType             = "proxytypes";
         outputType             = "ellipsis";
         outputType             = "proxycode";
+        outputType             = "proxytypes";
+        outputType             = "fntables";
+
     }
     #endif
 
@@ -415,6 +417,11 @@ int main( int argc, char* argv[] )
         if (!generateDataReport(std::cout, errInfo, inputData, proxyGenerationOptions))
             return returnErrMsg(1);
     }
+    else if (outputType=="proxytypes")
+    {
+        if (!generateProxyTypes(std::cout, errInfo, inputData, proxyGenerationOptions))
+            return returnErrMsg(1);
+    }
     else if (outputType=="forward")
     {
         if (!generateForwardReport(std::cout, errInfo, inputData, proxyGenerationOptions))
@@ -425,15 +432,15 @@ int main( int argc, char* argv[] )
         if (!generateFunctionTables(std::cout, errInfo, inputData, proxyGenerationOptions))
             return returnErrMsg(1);
     }
-    else if (outputType=="proxytypes")
-    {
-        if (!generateProxyTypes(std::cout, errInfo, inputData, proxyGenerationOptions))
-            return returnErrMsg(1);
-    }
     else if (outputType=="fnindexes")
     {
         if (!generateProxyIndexes(std::cout, errInfo, inputData, proxyGenerationOptions))
             return returnErrMsg(1);
+    }
+    else if (outputType=="getprocptrfuncs")
+    {
+        if (!generateGetProcPtrFuncs(std::cout, errInfo, inputData, proxyGenerationOptions))
+             return returnErrMsg(1);
     }
     else if (outputType=="def")
     {

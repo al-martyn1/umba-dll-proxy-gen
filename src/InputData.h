@@ -83,6 +83,8 @@ struct InputData
         if (pgo.dllForwardTarget.empty())
             return;
 
+        std::string dllForwardTarget = pgo.substMacros(pgo.dllForwardTarget);
+
         for(auto &me: moduleEntries)
         {
             if (me.isForwardEntry())
@@ -92,7 +94,7 @@ struct InputData
             {
                 if (pgo.forwardData)
                 {
-                    me.updateToForwardEntry(pgo.dllForwardTarget);
+                    me.updateToForwardEntry(dllForwardTarget);
                 }
 
                 continue;
@@ -102,7 +104,7 @@ struct InputData
             if (pgo.forwardList.find(internalName)!=pgo.forwardList.end())
             {
                 // Форвардим по заданному списку
-                me.updateToForwardEntry(pgo.dllForwardTarget);
+                me.updateToForwardEntry(dllForwardTarget);
             }
 
             FunctionInfo fi;
@@ -114,7 +116,7 @@ struct InputData
             {
                 if (pgo.forwardEllipsis)
                 {
-                    me.updateToForwardEntry(pgo.dllForwardTarget);
+                    me.updateToForwardEntry(dllForwardTarget);
                 }
 
                 continue;

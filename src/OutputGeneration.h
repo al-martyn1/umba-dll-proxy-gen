@@ -10,6 +10,8 @@
 #include "InputData.h"
 #include "StringAppendWithSep.h"
 
+#include "substMacros.h"
+
 //----------------------------------------------------------------------------
 
 
@@ -42,30 +44,6 @@ std::string getFillComplementString(const std::string str, std::size_t complemen
 
 
 //----------------------------------------------------------------------------
-inline
-void setMacroValueMulticase(umba::macros::StringStringMap<std::string> &macros, const std::string &name, const std::string &value)
-{
-    macros[name] = value;
-    macros[marty_cpp::toUpper(name)] = marty_cpp::toUpper(value);
-    macros[marty_cpp::toLower(name)] = marty_cpp::toLower(value);
-}
-
-//------------------------------
-inline
-std::string substMacros( const std::string &tplStr, const umba::macros::StringStringMap<std::string> &macros )
-{
-    return 
-    umba::macros::substMacros( tplStr
-                             , umba::macros::MacroTextFromMapRef<std::string>(macros)
-                             , umba::macros::smf_KeepUnknownVars | umba::macros::smf_DisableRecursion
-                             );
-}
-
-//----------------------------------------------------------------------------
-
-
-
-//----------------------------------------------------------------------------
 template<typename StreamType> inline
 bool generateConfigDefs(StreamType &oss, ErrInfo &errInfo, const InputData &inputData, DllProxyGenerationOptions &pgo)
 {
@@ -73,7 +51,7 @@ bool generateConfigDefs(StreamType &oss, ErrInfo &errInfo, const InputData &inpu
 
     auto generateConfigDefBool = [&](std::string optName, bool val)
     {
-        std::string optFullName     = pgo.configDefPrefix + marty_cpp::toUpper(optName);
+        std::string optFullName     = pgo.substMacros(pgo.configDefPrefix) + marty_cpp::toUpper(optName);
         std::string optFullNameFill = getFillComplementString(optFullName, 48);
 
         if (val)
@@ -204,9 +182,9 @@ bool generateFunctionTables(StreamType &oss, ErrInfo &errInfo, const InputData &
 
     
     // sqlite3orgFunc
-    oss << "FARPROC " << pgo.proxyImplArrayNamesPrefix << "Pointers[" << implNames.size() << "] = { 0 };\n\n";
+    oss << "FARPROC " << pgo.substMacros(pgo.proxyImplArrayNamesPrefix) << "Pointers[" << implNames.size() << "] = { 0 };\n\n";
 
-    oss << "const char* " << pgo.proxyImplArrayNamesPrefix << "Names[" << implNames.size() << "] =\n";
+    oss << "const char* " << pgo.substMacros(pgo.proxyImplArrayNamesPrefix) << "Names[" << implNames.size() << "] =\n";
 
     unsigned idx = (unsigned)-1;
     for(auto exportName: implNames)
@@ -286,7 +264,7 @@ bool generateProxyTypes(StreamType &oss, ErrInfo &errInfo, const InputData &inpu
         FnDefGenerateOptions fnDefGenerateOptions;
         clearArgNames(fi);
 
-        umba::macros::StringStringMap<std::string> macros;
+        umba::macros::StringStringMap<std::string> macros = pgo.predefinedMacros; // !!!
         setMacroValueMulticase(macros, "FunctionName", internalName);
 
         std::string functionPtrType = substMacros(pgo.functionPtrTypeFormat, macros);
@@ -321,7 +299,7 @@ bool generateProxyIndexes(StreamType &oss, ErrInfo &errInfo, const InputData &in
     {
         ++idx;
 
-        umba::macros::StringStringMap<std::string> macros;
+        umba::macros::StringStringMap<std::string> macros = pgo.predefinedMacros; //!!!
         setMacroValueMulticase(macros, "FunctionName", exportName);
         std::string fnIdxConstantName = substMacros( pgo.functionIndexConstantNameFormat, macros );
         std::string fillStr = getFillComplementString(fnIdxConstantName, 64);
@@ -342,7 +320,7 @@ bool generateProxyIndexes(StreamType &oss, ErrInfo &errInfo, const InputData &in
 template<typename StreamType> inline
 bool generateDef(StreamType &oss, ErrInfo &errInfo, const InputData &inputData, DllProxyGenerationOptions &pgo)
 {
-    oss << "LIBRARY \"" << pgo.dllTarget << "\"\n";
+    oss << "LIBRARY \"" << pgo.substMacros(pgo.dllTarget) << "\"\n";
     oss << "EXPORTS\n";
 
     for(const auto &me: inputData.moduleEntries)
@@ -418,7 +396,7 @@ bool generateProxyCode(StreamType &oss, ErrInfo &errInfo, const InputData &input
             return false;
         }
 
-        umba::macros::StringStringMap<std::string> macros;
+        umba::macros::StringStringMap<std::string> macros = pgo.predefinedMacros; //!!!
         setMacroValueMulticase(macros, "FunctionName", implName);
         setMacroValueMulticase(macros, "DataName"    , implName);
 
@@ -447,7 +425,7 @@ bool generateProxyCode(StreamType &oss, ErrInfo &errInfo, const InputData &input
 
 
         FnDefGenerateOptions fnDefGenerateOptions;
-        fnDefGenerateOptions.prototypePrefix = pgo.proxyFunctionImplementationPrefix; //  "PROXY_EXPORT";
+        fnDefGenerateOptions.prototypePrefix = pgo.substMacros(pgo.proxyFunctionImplementationPrefix); //  "PROXY_EXPORT";
 
         generateArgNames(fi, pgo);
 
@@ -533,7 +511,7 @@ bool generateHookCode(StreamType &oss, ErrInfo &errInfo, const InputData &inputD
             return false;
         }
 
-        umba::macros::StringStringMap<std::string> macros;
+        umba::macros::StringStringMap<std::string> macros = pgo.predefinedMacros; //!!!
         setMacroValueMulticase(macros, "FunctionName", implName);
         setMacroValueMulticase(macros, "DataName"    , implName);
 
@@ -552,7 +530,7 @@ bool generateHookCode(StreamType &oss, ErrInfo &errInfo, const InputData &inputD
 
 
         FnDefGenerateOptions fnDefGenerateOptions;
-        fnDefGenerateOptions.prototypePrefix = pgo.proxyFunctionImplementationPrefix; //  "PROXY_EXPORT";
+        fnDefGenerateOptions.prototypePrefix = pgo.substMacros(pgo.proxyFunctionImplementationPrefix); //  "PROXY_EXPORT";
 
         generateArgNames(fi, pgo);
 
@@ -562,7 +540,7 @@ bool generateHookCode(StreamType &oss, ErrInfo &errInfo, const InputData &inputD
         
 
         std::string
-        generatedFunctionDef = generateFunctionDef(fi, false, pgo.hookFunctionNameFormat /* "$(FunctionName)" */ , fnDefGenerateOptions);
+        generatedFunctionDef = generateFunctionDef(fi, false, substMacros( pgo.hookFunctionNameFormat, macros ) /* "$(FunctionName)" */ , fnDefGenerateOptions);
         oss << "" << generatedFunctionDef << "\n";
         oss << "{\n";
 
@@ -583,7 +561,7 @@ bool generateHookCode(StreamType &oss, ErrInfo &errInfo, const InputData &inputD
         if (!fi.hasEllipsisArg())
         {
             oss << "    " << functionPtrType // generateFunctionName(fi, "$(FunctionName)_fnptr_t")
-                          << " orgFnPtr = " << pgo.getOriginalFunctionPtrFuncTemplateName << "<" << functionPtrType /* generateFunctionName(fi, "$(FunctionName)_fnptr_t") */  << ">("
+                          << " orgFnPtr = " << substMacros(pgo.getOriginalFunctionPtrFuncTemplateName, macros ) << "<" << functionPtrType /* generateFunctionName(fi, "$(FunctionName)_fnptr_t") */  << ">("
                           << fnIdxConstantName << ");\n";
             if (pgo.generateCustomHandler && !customHandler.empty())
             {
@@ -624,8 +602,10 @@ bool generateHookInitCode(StreamType &oss, ErrInfo &errInfo, const InputData &in
                                                                                return true;
                                                                            }
                                                                          );
-    oss << "DetourTransactionBegin();\n";
-    oss << "DetourUpdateThread(GetCurrentThread());\n\n";
+    // oss << "DetourTransactionBegin();\n";
+    // oss << "DetourUpdateThread(GetCurrentThread());\n\n";
+
+    oss << pgo.substMacros(pgo.hookInitStartFormat) << ";\n\n";
 
 
     unsigned idx = (unsigned)-1;
@@ -643,7 +623,7 @@ bool generateHookInitCode(StreamType &oss, ErrInfo &errInfo, const InputData &in
             return false;
         }
 
-        umba::macros::StringStringMap<std::string> macros;
+        umba::macros::StringStringMap<std::string> macros = pgo.predefinedMacros; //!!!
         setMacroValueMulticase(macros, "FunctionName", implName);
         setMacroValueMulticase(macros, "DataName"    , implName);
 
@@ -662,7 +642,7 @@ bool generateHookInitCode(StreamType &oss, ErrInfo &errInfo, const InputData &in
 
 
         FnDefGenerateOptions fnDefGenerateOptions;
-        fnDefGenerateOptions.prototypePrefix = pgo.proxyFunctionImplementationPrefix; //  "PROXY_EXPORT";
+        fnDefGenerateOptions.prototypePrefix = pgo.substMacros(pgo.proxyFunctionImplementationPrefix); //  "PROXY_EXPORT";
 
         generateArgNames(fi, pgo);
 
@@ -672,14 +652,21 @@ bool generateHookInitCode(StreamType &oss, ErrInfo &errInfo, const InputData &in
         std::string fnIdxConstantName = substMacros( pgo.functionIndexConstantNameFormat, macros );
         std::string hookFunctionName  = substMacros( pgo.hookFunctionNameFormat, macros );
 
+        macros["FunctionIndex"]          = fnIdxConstantName;
+        macros["HookFunctionName"]       = hookFunctionName;
+        macros["FunctionPointersTable"]  = pgo.substMacros(pgo.proxyImplArrayNamesPrefix) + "Pointers";
+        macros["GetFunctionPtr"]         = pgo.substMacros(pgo.getOriginalFunctionPtrFuncTemplateName);
+        macros["GetFunctionFarprocPtr"]  = pgo.substMacros(pgo.getOriginalFunctionFarprocPtrFuncName);
 
-        oss << pgo.proxyImplArrayNamesPrefix << "Pointers[" << fnIdxConstantName << "] = " << pgo.getOriginalFunctionPtrFuncName << "(" << fnIdxConstantName << ");\n";
-        oss << "DetourAttach(&(PVOID&)" << pgo.proxyImplArrayNamesPrefix << "Pointers[" << fnIdxConstantName << "], (PVOID)" << hookFunctionName << ");\n\n";
+        //oss << pgo.proxyImplArrayNamesPrefix << "Pointers[" << fnIdxConstantName << "] = " << pgo.getOriginalFunctionFarprocPtrFuncName << "(" << fnIdxConstantName << ");\n";
+        //oss << "DetourAttach(&(PVOID&)" << pgo.substMacros(pgo.proxyImplArrayNamesPrefix) << "Pointers[" << fnIdxConstantName << "], (PVOID)" << hookFunctionName << ");\n\n";
+        oss << substMacros(pgo.hookInitFormat, macros) << ";\n\n";
 
     }
 
     oss << "\n";
-    oss << "DetourTransactionCommit();\n\n";
+    // oss << "DetourTransactionCommit();\n\n";
+    oss << pgo.substMacros(pgo.hookInitEndFormat) << ";\n\n";
 
     return true;
 
@@ -697,8 +684,9 @@ bool generateHookDeinitCode(StreamType &oss, ErrInfo &errInfo, const InputData &
                                                                                return true;
                                                                            }
                                                                          );
-    oss << "DetourTransactionBegin();\n";
-    oss << "DetourUpdateThread(GetCurrentThread());\n\n";
+    // oss << "DetourTransactionBegin();\n";
+    // oss << "DetourUpdateThread(GetCurrentThread());\n\n";
+    oss << pgo.substMacros(pgo.hookDeinitStartFormat) << ";\n\n";
 
 
     unsigned idx = (unsigned)-1;
@@ -716,7 +704,7 @@ bool generateHookDeinitCode(StreamType &oss, ErrInfo &errInfo, const InputData &
             return false;
         }
 
-        umba::macros::StringStringMap<std::string> macros;
+        umba::macros::StringStringMap<std::string> macros = pgo.predefinedMacros; //!!!
         setMacroValueMulticase(macros, "FunctionName", implName);
         setMacroValueMulticase(macros, "DataName"    , implName);
 
@@ -735,7 +723,7 @@ bool generateHookDeinitCode(StreamType &oss, ErrInfo &errInfo, const InputData &
 
 
         FnDefGenerateOptions fnDefGenerateOptions;
-        fnDefGenerateOptions.prototypePrefix = pgo.proxyFunctionImplementationPrefix; //  "PROXY_EXPORT";
+        fnDefGenerateOptions.prototypePrefix = pgo.substMacros(pgo.proxyFunctionImplementationPrefix); //  "PROXY_EXPORT";
 
         generateArgNames(fi, pgo);
 
@@ -745,21 +733,86 @@ bool generateHookDeinitCode(StreamType &oss, ErrInfo &errInfo, const InputData &
         std::string fnIdxConstantName = substMacros( pgo.functionIndexConstantNameFormat, macros );
         std::string hookFunctionName  = substMacros( pgo.hookFunctionNameFormat, macros );
 
+        macros["FunctionIndex"]          = fnIdxConstantName;
+        macros["HookFunctionName"]       = hookFunctionName;
+        macros["FunctionPointersTable"]  = pgo.substMacros(pgo.proxyImplArrayNamesPrefix) + "Pointers";
 
         // oss << pgo.proxyImplArrayNamesPrefix << "Pointers[" << fnIdxConstantName << "] = " << pgo.getOriginalFunctionPtrFuncTemplateName << "(" << fnIdxConstantName << ");\n";
-        oss << "DetourDetach(&(PVOID&)" << pgo.proxyImplArrayNamesPrefix << "Pointers[" << fnIdxConstantName << "], (PVOID)" << hookFunctionName << ");\n\n";
+        //oss << "DetourDetach(&(PVOID&)" << pgo.substMacros(pgo.proxyImplArrayNamesPrefix) << "Pointers[" << fnIdxConstantName << "], (PVOID)" << hookFunctionName << ");\n\n";
+        oss << substMacros(pgo.hookDeinitFormat, macros) << ";\n\n";
 
     }
 
     oss << "\n";
-    oss << "DetourTransactionCommit();\n\n";
+    //oss << "DetourTransactionCommit();\n\n";
+    oss << pgo.substMacros(pgo.hookDeinitEndFormat) << ";\n\n";
 
     return true;
 
 }
 
 //----------------------------------------------------------------------------
+template<typename StreamType> inline
+bool generateGetProcPtrFuncs(StreamType &oss, ErrInfo &errInfo, const InputData &inputData, DllProxyGenerationOptions &pgo)
+{
+    umba::macros::StringStringMap<std::string> macros = pgo.predefinedMacros; //!!!
+    macros["FunctionPointersTable"]  = pgo.substMacros(pgo.proxyImplArrayNamesPrefix) + "Pointers";
+    macros["FunctionNamesTable"]     = pgo.substMacros(pgo.proxyImplArrayNamesPrefix) + "Names";
+    macros["GetFunctionPtr"]         = pgo.substMacros(pgo.getOriginalFunctionPtrFuncTemplateName);
+    macros["GetFunctionFarprocPtr"]  = pgo.substMacros(pgo.getOriginalFunctionFarprocPtrFuncName);
 
+    setMacroValueMulticase(macros, "ProxyDll"     , pgo.substMacros(pgo.dllTarget)       );
+    setMacroValueMulticase(macros, "HookDll"      , pgo.substMacros(pgo.dllTarget)       );
+    setMacroValueMulticase(macros, "ForwardTarget", pgo.substMacros(pgo.dllForwardTarget));
+
+    macros["GetModuleHandleApiFn"]   = pgo.useLoadLibrary ? "LoadLibraryA" : "GetModuleHandleA";
+
+    // static HMODULE hMdod = GetModuleHandleA("e_sqlite3.dll");
+    // static HMODULE hMdod = LoadLibraryA("e_sqlite3_org.dll");
+
+    oss << substMacros( 
+"// INI: ProxyImplArrayNamesPrefix, FunctionPtrTypeFormat, GetOriginalFunctionPtrFuncTemplateName, getOriginalFunctionFarprocPtrFuncName"
+"inline\n"
+"HMODULE getOriginal$(ModuleName)Hmodule()\n"
+"{\n"
+"    static HMODULE hMdod = $(GetModuleHandleApiFn)(\"$(forwardtarget).dll\");\n"
+"    return hMdod;\n"
+"}\n"
+"\n"
+"inline\n"
+"FARPROC $(GetFunctionFarprocPtr)(unsigned idx)\n"
+"{\n"
+"    return GetProcAddress(getOriginal$(ModuleName)Hmodule(), $(FunctionNamesTable)[idx]);\n"
+"}\n"
+"\n"
+"template<typename FnPtrType>\n"
+"FnPtrType $(GetFunctionPtr)(unsigned idx)\n"
+"{\n"
+"    return reinterpret_cast<FnPtrType>($(FunctionPointersTable)[idx]);\n"
+"}\n"
+"\n"
+                      , macros);
+
+// HMODULE getOriginalKernel32Hmodule()
+// {
+//     static HMODULE hMdod = GetModuleHandleA("kernel32.dll");
+//     return hMdod;
+// }
+//  
+// FARPROC getOriginalKernel32FunctionFarprocPtr(unsigned idx)
+// {
+//     return GetProcAddress(getOriginalKernel32Hmodule(), fnTableKernel32Names[idx]);
+// }
+//  
+// template<typename FnPtrType>
+// FnPtrType getOriginalKernel32FunctionPtr(unsigned idx)
+// {
+//     return reinterpret_cast<FnPtrType>(fnTableKernel32Pointers[idx]);
+// }
+
+    return true;
+
+}
 
 
 

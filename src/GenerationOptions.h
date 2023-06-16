@@ -1,10 +1,17 @@
 #pragma once
 
+#include "umba/umba.h"
+//
+#include "umba/macros.h"
+#include "umba/macro_helpers.h"
+
 #include "utils.h"
 #include "marty_cpp/marty_cpp.h"
 
 #include "ErrInfo.h"
 #include "FunctionPrototypeParsing.h"
+
+#include "substMacros.h"
 
 #include <string>
 
@@ -24,17 +31,26 @@ struct DllProxyGenerationOptions
     bool forwardEllipsis            = false           ; //!< форвардим все функции с элипсисом
     std::unordered_set<std::string> forwardList       ; //!< набор имён для форварда
 
+    bool useLoadLibrary             = false           ; //!< Use LoadLibraryA or GetModuleHandleA
 
     std::string functionIndexConstantNameFormat       ; //!< Формат константы индекса функции
     std::string ellipsisImplFormat                    ; //!< Формат вызова оригинальной функции (или какой-то замены) для функций с переменным числом аргументов
     std::string functionPtrTypeFormat                 ; //!< Формат указателя на функцию
     std::string getOriginalFunctionPtrFuncTemplateName;
-    std::string getOriginalFunctionPtrFuncName;
+    std::string getOriginalFunctionFarprocPtrFuncName ;
     std::string proxyFunctionImplementationPrefix     ; //!< Something as APIEXPORT etc, or keep it empty
     std::string proxyDataFormat                       ; //!< Если DATA элементы не форвардятся в оригинальную DLL, то они реализовываются по этому шаблону
     std::string proxyImplArrayNamesPrefix             ; //!< Префикс для orgFuncPointers/orgFuncNames etc
 
     std::string hookFunctionNameFormat                ; //!< Имя функции хука
+
+    std::string hookInitStartFormat                   ;
+    std::string hookInitEndFormat                     ;
+    std::string hookInitFormat                        ;
+
+    std::string hookDeinitStartFormat                 ;
+    std::string hookDeinitEndFormat                   ;
+    std::string hookDeinitFormat                      ;
 
     std::string proxyHelo                             ; //!< Код с макросами для генерации proxyHelo - однострочный
     bool generateProxyHelo          = false           ; //!< Генерировать код "Proxy called"
@@ -48,11 +64,21 @@ struct DllProxyGenerationOptions
     bool generateJumpAll            = false           ; //!< Генерим JUMP вместо вызова оригинальной функции для всех прокси
 
 
+    umba::macros::StringStringMap<std::string>        predefinedMacros; // Предопределенные макросы, задаются в INI файле
+
     //! Имена (начальные) для различных типов параметров функций. 
     /*! Используется для генерации имен параметров, если они не заданы в прототипе. 
         К одинаковым именам добавляется номер при дублировании - lpcStr, lpcStr2, lpcStr3, ... 
     */
     std::unordered_map<std::string,std::string> paramInitialNames;
+
+
+    //! Подстановка макросов
+    std::string substMacros(const std::string &tpl) const
+    {
+        return ::substMacros(tpl, predefinedMacros);
+    }
+
 
 }; // struct DllProxyGenerationOptions
 
@@ -211,10 +237,53 @@ bool parseDllProxyGenerationOptions( const std::string                &functions
         
         bool boolVal = false;
 
-
-        if (name=="CONFIGDEFPREFIX") // ConfigDefPrefix
+        auto checkSetParamString = [&](const std::string &testName, std::string &pgoParam) -> bool
         {
-            pgo.configDefPrefix = value;
+            if (name==marty_cpp::toUpper(testName))
+            {
+                pgoParam = value;
+                return true;
+            }
+
+            return false;
+        };
+
+        // auto checkSetParamBool = [&](const std::string &testName, bool &pgoParam, auto errHandler) -> bool
+        // {
+        //     if (name==marty_cpp::toUpper(testName))
+        //     {
+        //         if (!fromBool(value, boolVal))
+        //         {
+        //             // return setInvalidMsg(testName);
+        //  
+        //         }
+        //  
+        //         pgo.configDefOnlyForActiveOption = boolVal;
+        //  
+        //         pgoParam = value;
+        //         return true;
+        //     }
+        //  
+        //     return false;
+        // };
+
+        
+        #define PGO_INI_CHECKSET_PARAM_STRING(param) \
+                    checkSetParamString(#param, pgo.param)
+
+        // if (name=="CONFIGDEFPREFIX") // ConfigDefPrefix
+        // {
+        //     pgo.configDefPrefix = value;
+        //     continue;
+        // }
+        // if (checkSetStringParam("ConfigDefPrefix", pgo.configDefPrefix)) // ConfigDefPrefix
+        // {
+        //     pgo.configDefPrefix = value;
+        //     continue;
+        // }
+        if (PGO_INI_CHECKSET_PARAM_STRING(configDefPrefix))
+        {
+            //pgo.configDefPrefix = value;
             continue;
         }
         if (name=="CONFIGDEFONLYFORACTIVEOPTION")
@@ -278,61 +347,80 @@ bool parseDllProxyGenerationOptions( const std::string                &functions
             continue;
         }
 
-
-        if (name=="FUNCTIONINDEXCONSTANTNAMEFORMAT") // FunctionIndexConstantNameFormat
+        if (name=="USELOADLIBRARY") // useLoadLibrary
         {
-            pgo.functionIndexConstantNameFormat = value;
+            if (!fromBool(value, boolVal))
+            {
+                return setInvalidMsg("useLoadLibrary");
+            }
+
+            pgo.useLoadLibrary = boolVal;
             continue;
         }
 
-        if (name=="ELLIPSISIMPLFORMAT") // EllipsisImplFormat
+        // if (name=="FUNCTIONINDEXCONSTANTNAMEFORMAT") // FunctionIndexConstantNameFormat
+        if (PGO_INI_CHECKSET_PARAM_STRING(functionIndexConstantNameFormat))
         {
-            pgo.ellipsisImplFormat = value;
+            //pgo.functionIndexConstantNameFormat = value;
             continue;
         }
 
-        if (name=="FUNCTIONPTRTYPEFORMAT") // FunctionPtrTypeFormat
+        //if (name=="ELLIPSISIMPLFORMAT") // EllipsisImplFormat
+        if (PGO_INI_CHECKSET_PARAM_STRING(ellipsisImplFormat))
         {
-            pgo.functionPtrTypeFormat = value;
+            //pgo.ellipsisImplFormat = value;
             continue;
         }
 
-        if (name=="GETORIGINALFUNCTIONPTRFUNCTEMPLATENAME") // GetOriginalFunctionPtrFuncTemplateName
+        //if (name=="FUNCTIONPTRTYPEFORMAT") // FunctionPtrTypeFormat
+        if (PGO_INI_CHECKSET_PARAM_STRING(functionPtrTypeFormat))
         {
-            pgo.getOriginalFunctionPtrFuncTemplateName = value;
+            //pgo.functionPtrTypeFormat = value;
             continue;
         }
 
-        if (name=="GETORIGINALFUNCTIONPTRFUNCNAME") // GetOriginalFunctionPtrFuncName
+        //if (name=="GETORIGINALFUNCTIONPTRFUNCTEMPLATENAME") // GetOriginalFunctionPtrFuncTemplateName
+        if (PGO_INI_CHECKSET_PARAM_STRING(getOriginalFunctionPtrFuncTemplateName))
         {
-            pgo.getOriginalFunctionPtrFuncName = value;
+            //pgo.getOriginalFunctionPtrFuncTemplateName = value;
             continue;
         }
 
-        if (name=="PROXYFUNCTIONIMPLEMENTATIONPREFIX") // ProxyFunctionImplementationPrefix
+        //if (name=="getOriginalFunctionFarprocPtrFuncName") // getOriginalFunctionFarprocPtrFuncName
+        if (PGO_INI_CHECKSET_PARAM_STRING(getOriginalFunctionFarprocPtrFuncName))
         {
-            pgo.proxyFunctionImplementationPrefix = value;
+            //pgo.getOriginalFunctionFarprocPtrFuncName = value;
             continue;
         }
 
-        if (name=="PROXYDATAFORMAT") // ProxyDataFormat
+        //if (name=="PROXYFUNCTIONIMPLEMENTATIONPREFIX") // ProxyFunctionImplementationPrefix
+        if (PGO_INI_CHECKSET_PARAM_STRING(proxyFunctionImplementationPrefix))
         {
-            pgo.proxyDataFormat = value;
+            //pgo.proxyFunctionImplementationPrefix = value;
             continue;
         }
 
-        if (name=="PROXYIMPLARRAYNAMESPREFIX") // ProxyImplArrayNamesPrefix
+        //if (name=="PROXYDATAFORMAT") // ProxyDataFormat
+        if (PGO_INI_CHECKSET_PARAM_STRING(proxyDataFormat))
         {
-            pgo.proxyImplArrayNamesPrefix = value;
+            //pgo.proxyDataFormat = value;
+            continue;
+        }
+
+        //if (name=="PROXYIMPLARRAYNAMESPREFIX") // ProxyImplArrayNamesPrefix
+        if (PGO_INI_CHECKSET_PARAM_STRING(proxyImplArrayNamesPrefix))
+        {
+            //pgo.proxyImplArrayNamesPrefix = value;
             continue;
         }
 
 
 
 
-        if (name=="PROXYHELO") // ProxyHelo
+        //if (name=="PROXYHELO") // ProxyHelo
+        if (PGO_INI_CHECKSET_PARAM_STRING(proxyHelo))
         {
-            pgo.proxyHelo = value;
+            //pgo.proxyHelo = value;
             continue;
         }
         if (name=="GENERATEPROXYHELO")
@@ -347,9 +435,10 @@ bool parseDllProxyGenerationOptions( const std::string                &functions
         }
 
 
-        if (name=="CUSTOMHANDLERFORMAT") // CustomHandlerFormat
+        //if (name=="CUSTOMHANDLERFORMAT") // CustomHandlerFormat
+        if (PGO_INI_CHECKSET_PARAM_STRING(customHandlerFormat))
         {
-            pgo.customHandlerFormat = value;
+            //pgo.customHandlerFormat = value;
             continue;
         }
         if (name=="GENERATECUSTOMHANDLER")
@@ -363,13 +452,72 @@ bool parseDllProxyGenerationOptions( const std::string                &functions
             continue;
         }
 
-        if (name=="HOOKFUNCTIONNAMEFORMAT") // HookFunctionNameFormat
+        //if (name=="HOOKFUNCTIONNAMEFORMAT") // HookFunctionNameFormat
+        if (PGO_INI_CHECKSET_PARAM_STRING(hookFunctionNameFormat))
         {
-            pgo.hookFunctionNameFormat = value;
+            //pgo.hookFunctionNameFormat = value;
             continue;
         }
 
-        
+        if (PGO_INI_CHECKSET_PARAM_STRING(hookInitStartFormat))
+        {
+            continue;
+        }
+
+        if (PGO_INI_CHECKSET_PARAM_STRING(hookInitEndFormat))
+        {
+            continue;
+        }
+
+        if (PGO_INI_CHECKSET_PARAM_STRING(hookInitFormat))
+        {
+            continue;
+        }
+
+        if (PGO_INI_CHECKSET_PARAM_STRING(hookDeinitStartFormat))
+        {
+            continue;
+        }
+
+        if (PGO_INI_CHECKSET_PARAM_STRING(hookDeinitEndFormat))
+        {
+            continue;
+        }
+
+        if (PGO_INI_CHECKSET_PARAM_STRING(hookDeinitFormat))
+        {
+            continue;
+        }
+
+
+        if (name=="SETMACRO" || name=="SETMACROMULTICASE") // SetMacro/SetMacroMulticase
+        {
+            std::size_t sepPos = value.find(':');
+            
+            std::string macroName ;
+            std::string macroValue;
+
+            if (sepPos==value.npos)
+            {
+                macroName = value;
+            }
+            else
+            {
+                macroName  = trim(std::string(value, 0, sepPos));
+                macroValue = trim(std::string(value, sepPos+1));
+            }
+
+            // Both for SETMACRO and SETMACROMULTICASE
+            pgo.predefinedMacros[macroName] = macroValue;
+
+            if (name=="SETMACROMULTICASE")
+            {
+                pgo.predefinedMacros[marty_cpp::toUpper(macroName)] = marty_cpp::toUpper(macroValue);
+                pgo.predefinedMacros[marty_cpp::toLower(macroName)] = marty_cpp::toLower(macroValue);
+            }
+
+            continue;
+        }
 
 
         return setUnknownMsg(orgName);

@@ -3,11 +3,7 @@
 @echo.
 @echo.
 
-@if not exist .generated_res mkdir .generated_res
-@set GEN=.out\msvc2019\x64\Debug\umba-dll-proxy-gen.exe
-
-@rem set GENERATEDBASE=.generated_res\
-@set GENERATEDBASE=
+@call gen_config.bat
 
 
 @%GEN% data\initial_names.ini  data\proxy.ini  data\sqlite_prototypes.txt  data\sqlite_proxy_functions_list.txt  types        > %GENERATEDBASE%types.txt
