@@ -1,16 +1,15 @@
-Umba-генератор прокси/хук DLL
-
+# Umba-генератор прокси/хук DLL
 
 Данный генератор предназначен для упрощения создания прокси-Dll и хук-DLL.
 
 Прокси-Dll и хук-DLL предназначены для перехвата функций сторонних DLL в исследовательских целях.
 
-Прокси-DLL - носит имя оригинальной подменяемой DLL, экспортирует полный набор оригинальных функций
+**Прокси-DLL** - носит имя оригинальной подменяемой DLL, экспортирует полный набор оригинальных функций
 (и данных). Подменяемые функциипроизводят какую-то работу (протоколируют значения параметров etc),
 и/или передают управление в соответствующие функции оригинальной DLL, которая располагается рядом 
 с прокси или в путях поиска модулей под именем вида SOME_MODULE_org.dll. 
 
-Прокси-DLL загружается системным загрузчиком при запуске приложения. Оригинальная DLL (с изменённым именем)
+**Прокси-DLL** загружается системным загрузчиком при запуске приложения. Оригинальная DLL (с изменённым именем)
 загружается (LoadLibrary) по мере необходимости, в момент вызова любой из перехваченных функций.
 
 Хук-DLL инжектируется в запущенный процесс (или на этапе запуска процесса). Инициалия перехватчиков производится
@@ -18,18 +17,18 @@ Umba-генератор прокси/хук DLL
 запрещено во время работы DllMain. Соответственно, перехватываемая DLL уже должна быть загружена в адресное 
 пространство процесса.
 
-Формат вызова:
-umba-dll-proxy-gen INITIAL_NAMES_INI PROXY_GENERATION_CONFIG_INI PROTOTYPES_LIST_TXT PROXY_FUNCTIONS_LIST_TXT GENERATION_TARGET
+**Формат вызова**:
+>umba-dll-proxy-gen INITIAL_NAMES_INI PROXY_GENERATION_CONFIG_INI PROTOTYPES_LIST_TXT PROXY_FUNCTIONS_LIST_TXT GENERATION_TARGET
 
 Вывод производится в STDOUT и может быть перенаправлен в соответствующий файл.
 
-INITIAL_NAMES_INI - файл с начальными именами параметров функций в зависимости от типа параметра.
+**INITIAL_NAMES_INI** - файл с начальными именами параметров функций в зависимости от типа параметра.
 Прототипы функций могут не содержать имён параметров, в то же время для использования в функиях-перехватчиках
 все параметры должны быть именованы. При отсутствии имён параметров они назначаются атвтоматически, в соответствии с их типами.
 
-PROXY_GENERATION_CONFIG_INI - INI-файл с параметрами генерации.
+**PROXY_GENERATION_CONFIG_INI** - INI-файл с параметрами генерации.
 
-PROTOTYPES_LIST_TXT - файл прототипов перехватываемых функций. Может содержать любое количество прототипов для генерации
+**PROTOTYPES_LIST_TXT** - файл прототипов перехватываемых функций. Может содержать любое количество прототипов для генерации
 нескольких прокси/хук-DLL.
 
 Пустые строки, и строки, содержащие в начале символы "//" или "#" - игнорируются.
@@ -38,11 +37,11 @@ PROTOTYPES_LIST_TXT - файл прототипов перехватываемы
 
 Прототипы функций могут быть в форме как собственно прототипов:
 
-HANDLE CreateFile2(LPCWSTR lpFileName, DWORD dwDesiredAccess, DWORD dwShareMode, DWORD dwCreationDisposition, LPCREATEFILE2_EXTENDED_PARAMETERS pCreateExParams);
+```HANDLE CreateFile2(LPCWSTR lpFileName, DWORD dwDesiredAccess, DWORD dwShareMode, DWORD dwCreationDisposition, LPCREATEFILE2_EXTENDED_PARAMETERS pCreateExParams);```
 
 так и в форме указателя на функцию:
 
-HANDLE (WINAPI*CreateFile2)(LPCWSTR lpFileName, DWORD dwDesiredAccess, DWORD dwShareMode, DWORD dwCreationDisposition, LPCREATEFILE2_EXTENDED_PARAMETERS pCreateExParams);
+```HANDLE (WINAPI*CreateFile2)(LPCWSTR lpFileName, DWORD dwDesiredAccess, DWORD dwShareMode, DWORD dwCreationDisposition, LPCREATEFILE2_EXTENDED_PARAMETERS pCreateExParams);```
 
 Вторая форма предпочтительнее, так как позволяет указывать спецификатор вызова (calling conventions) - __stdcall, __cdecl, WINAPI и тп.
 В первом случае для корректного разбора необходимо каким-либо образом передавать в парсер прототипов информацию обо всех возможных
@@ -50,12 +49,12 @@ HANDLE (WINAPI*CreateFile2)(LPCWSTR lpFileName, DWORD dwDesiredAccess, DWORD dwS
 
 Имена параметров могут отсутствовать, в качестве параметров могут быть использованы указатели на функции, 
 которые, в свою очередь, также могут принимать указатели на функции:
-int  (*sqlite3_create_function16)(sqlite3*,const void*,int,int,void*,void (*sqlite3_xFunc)(sqlite3_context*,int,sqlite3_value**),void (*sqlite3_xStep)(sqlite3_context*,int,sqlite3_value**),void (*sqlite3_xFinal)(sqlite3_context*));
+```int  (*sqlite3_create_function16)(sqlite3*,const void*,int,int,void*,void (*sqlite3_xFunc)(sqlite3_context*,int,sqlite3_value**),void (*sqlite3_xStep)(sqlite3_context*,int,sqlite3_value**),void (*sqlite3_xFinal)(sqlite3_context*));```
 
-PROXY_FUNCTIONS_LIST_TXT - список используемых в модуле-перехватчике функций/данных. Используется формат описания элементов секции
+**PROXY_FUNCTIONS_LIST_TXT** - список используемых в модуле-перехватчике функций/данных. Используется формат описания элементов секции
 EXPORT .DEF-файла:
 
-entryname[=internal_name|other_module.exported_name] [@ordinal [NONAME] ] [ [PRIVATE] | [DATA] ]
+>entryname[=internal_name|other_module.exported_name] [@ordinal [NONAME] ] [ [PRIVATE] | [DATA] ]
 
 Подробности см. тут - https://learn.microsoft.com/en-us/cpp/build/reference/exports?view=msvc-170
 
@@ -64,7 +63,7 @@ entryname[=internal_name|other_module.exported_name] [@ordinal [NONAME] ] [ [PRI
 Можно использовать forward-форму other_module.exported_name. Также поддерживается атрибут DATA.
 
 
-GENERATION_TARGET - тип генерируемых выходных данных:
+**GENERATION_TARGET** - тип генерируемых выходных данных:
 
 types - выводит обнаруженные в возвращаемых значениях, а также в параметрах функций-прототипов типы.
 Может использоваться для обновления файла начальных имен параметров INITIAL_NAMES_INI.
@@ -98,7 +97,7 @@ hookinitcode - инициализация хуков; исходник на C++.
 hookdeinitcode - деинициализация хуков; исходник на C++.
 
 
-Использование.
+## Использование
 
 Для генерации прокси-DLL нужен полный список всех экспортируемых оригинальной DLL функций и данных. 
 Для генерации хук-DLL это не требуется.
