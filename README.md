@@ -36,12 +36,13 @@
 Прототипы функций должны быть отдельной строке, перенос прототипа на несколько строк не поддерживается.
 
 Прототипы функций могут быть в форме как собственно прототипов:
-
-```HANDLE CreateFile2(LPCWSTR lpFileName, DWORD dwDesiredAccess, DWORD dwShareMode, DWORD dwCreationDisposition, LPCREATEFILE2_EXTENDED_PARAMETERS pCreateExParams);```
-
+```
+HANDLE CreateFile2(LPCWSTR lpFileName, DWORD dwDesiredAccess, DWORD dwShareMode, DWORD dwCreationDisposition, LPCREATEFILE2_EXTENDED_PARAMETERS pCreateExParams);
+```
 так и в форме указателя на функцию:
-
-```HANDLE (WINAPI*CreateFile2)(LPCWSTR lpFileName, DWORD dwDesiredAccess, DWORD dwShareMode, DWORD dwCreationDisposition, LPCREATEFILE2_EXTENDED_PARAMETERS pCreateExParams);```
+```
+HANDLE (WINAPI*CreateFile2)(LPCWSTR lpFileName, DWORD dwDesiredAccess, DWORD dwShareMode, DWORD dwCreationDisposition, LPCREATEFILE2_EXTENDED_PARAMETERS pCreateExParams);
+```
 
 Вторая форма предпочтительнее, так как позволяет указывать спецификатор вызова (calling conventions) - __stdcall, __cdecl, WINAPI и тп.
 В первом случае для корректного разбора необходимо каким-либо образом передавать в парсер прототипов информацию обо всех возможных
@@ -49,15 +50,16 @@
 
 Имена параметров могут отсутствовать, в качестве параметров могут быть использованы указатели на функции, 
 которые, в свою очередь, также могут принимать указатели на функции:
-```int  (*sqlite3_create_function16)(sqlite3*,const void*,int,int,void*,void (*sqlite3_xFunc)(sqlite3_context*,int,sqlite3_value**),void (*sqlite3_xStep)(sqlite3_context*,int,sqlite3_value**),void (*sqlite3_xFinal)(sqlite3_context*));```
+```
+int  (*sqlite3_create_function16)(sqlite3*,const void*,int,int,void*,void (*sqlite3_xFunc)(sqlite3_context*,int,sqlite3_value**),void (*sqlite3_xStep)(sqlite3_context*,int,sqlite3_value**),void (*sqlite3_xFinal)(sqlite3_context*));
+```
 
 **PROXY_FUNCTIONS_LIST_TXT** - список используемых в модуле-перехватчике функций/данных. Используется формат описания элементов секции
 EXPORT .DEF-файла:
 
 >entryname[=internal_name|other_module.exported_name] [@ordinal [NONAME] ] [ [PRIVATE] | [DATA] ]
 
-Подробности см. тут - https://learn.microsoft.com/en-us/cpp/build/reference/exports?view=msvc-170
-
+Подробности см. [Rules for module-definition statements/Exports](https://learn.microsoft.com/en-us/cpp/build/reference/exports?view=msvc-170).
 Форма с internal_name не используется/не протестирована.
 
 Можно использовать forward-форму other_module.exported_name. Также поддерживается атрибут DATA.
@@ -66,7 +68,7 @@ EXPORT .DEF-файла:
 **GENERATION_TARGET** - тип генерируемых выходных данных:
 
 `types` - выводит обнаруженные в возвращаемых значениях, а также в параметрах функций-прототипов типы.
-Может использоваться для обновления файла начальных имен параметров INITIAL_NAMES_INI.
+Может использоваться для обновления файла начальных имен параметров INITIAL_NAMES_INI; текстовый отчет.
 
 `config` - файл с define'ами основных опций генерации; текстовый отчет.
 
