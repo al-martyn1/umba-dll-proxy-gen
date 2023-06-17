@@ -63,7 +63,7 @@
 
 **GENERATION_TARGET** - тип генерируемых выходных данных:
 
-_types_ - выводит обнаруженные в возвращаемых значениях, а также в параметрах функций-прототипов типы.
+`types` - выводит обнаруженные в возвращаемых значениях, а также в параметрах функций-прототипов типы.
 Может использоваться для обновления файла начальных имен параметров INITIAL_NAMES_INI; текстовый отчет.
 
 `config` - файл с define'ами основных опций генерации; текстовый отчет.
@@ -72,15 +72,15 @@ _types_ - выводит обнаруженные в возвращаемых з
 
 `data` - выводит все имена, которые являются данными, а не функциями; текстовый отчет.
 
+`forward` - выводит список всех имён, которые системными средствами (forward-механизм DLL) перенаправляются в оригинальную DLL; текстовый отчет.
+
 `proxytypes` - выводит typedef'ы для всех известных прототипов функций:
 `typedef HANDLE (WINAPI *CreateFile2_fn_ptr_t)(LPCWSTR, DWORD, DWORD, DWORD, LPCREATEFILE2_EXTENDED_PARAMETERS);`
 исходник на C++.
 
-`forward` - выводит список всех имён, которые системными средствами (forward-механизм DLL) перенаправляются в оригинальную DLL; исходник на C++.
-
 `fntables` - выводит таблицы: указателей на функции и имён функций; исходник на C++.
 
-`fnindexes` - выводит список констант - индексов функций в таблицах; исходник на C++.
+`fnindexes` - выводит определения (`define`) констант - индексов функций в таблицах; исходник на C++.
 
 `getprocptrfuncs` - реализация функций получения адреса перехватываемых функций; исходник на C++.
 
@@ -102,7 +102,7 @@ _types_ - выводит обнаруженные в возвращаемых з
 
 Самый простой способ - использование утилиты `GENDEF` из состава MinGW. Данная утилита генерирует .DEF-файл, 
 который можно сразу использовать при создании DLL. Более сложный способ - с использованием утилиты `DUMPBIN` из состава MSVC - тут придётся
-поредактировать её вывод. Из .DEF файла извлекаем содержимое секции `EXPORTS` (без самого заголовка секции `EXPORTS`)
+поредактировать её вывод. Из .DEF файла извлекается содержимое секции `EXPORTS` (без самого заголовка секции `EXPORTS`)
 и помещаем её в файл PROXY_FUNCTIONS_LIST_TXT (для прокси-DLL, для хук-DLL берем только те имена функций, которые будем перехватывать).
 
 Далее потребуется список прототипов функций. Его можно получить разными способами. Например, можно вручную поштучно находить их
@@ -110,12 +110,92 @@ _types_ - выводит обнаруженные в возвращаемых з
 есть структура `struct sqlite3_api_routines`, которая содержит указатели на большинство функций SQLITE.
 Помещаем прототипы в файл PROTOTYPES_LIST_TXT.
 
-Запускаем umba-dll-proxy-gen, при этом INITIAL_NAMES_INI PROXY_GENERATION_CONFIG_INI на данном этапе могут быть пустыми. Задаём генерацию 
+Запускаем `umba-dll-proxy-gen`, при этом INITIAL_NAMES_INI PROXY_GENERATION_CONFIG_INI на данном этапе могут быть пустыми. Задаём генерацию 
 отчета о типах параметров функций - types. На основе данного отчета делаем INI-файл с именами параметров, добавляя справа "= paramName" 
-для каждого типа.
+для каждого типа:
+```
+void**                       = ppv
+void*                        = pv
+int                          = i
+const void*                  = pcv
+double                       = dbl
+char**                       = ppStr
+const char*                  = pcStr
+LPCWSTR                      = lpcwStr
+LPWSTR                       = lpwStr
+```
+При автоматической генерации имён параметров для одинаковых имен параметров все параметры, кроме первого, нумеруются возрастающим индексом, начиная с 2:
+```
+void SomeFunc(LPCWSTR lpcwStr, LPCWSTR lpcwStr2, LPCWSTR lpcwStr3);
+```
 
 Затем создаём файл INI-файл PROXY_GENERATION_CONFIG_INI с параметрами генерации. Пример такого файла - `data\kernel32.ini`.
 Также можно посмотреть описания параметров в исходниках - `src/GenerationOptions.h`.
+```
+; Also defines MODULENAME:KERNEL32 and modulename:kernel32
+SetMacroMulticase  = ModuleName:Kernel32
+
+
+; Generate 
+; #define KERNEL32_HOOK_CONFIG_OPT_NAME 0/1
+; for ForwardData/ForwardEllipsis/GenerateCustomHandler options
+ConfigDefPrefix                          = $(MODULENAME)_HOOK_CONFIG_
+
+; Generate KERNEL32_HOOK_CONFIG_XXX only for active options (for true values)
+ConfigDefOnlyForActiveOption             = true
+; ConfigDefOnlyForActiveOption             = false
+
+; Function index in table s macro name format
+FunctionIndexConstantNameFormat          = $(MODULENAME)_HOOK_FN_IDX_$(FUNCTIONNAME)
+
+;
+EllipsisImplFormat                       = $(MODULENAME)_HOOK_ELLIPSIS_IMPL_$(FUNCTIONNAME)()
+ProxyFunctionImplementationPrefix        = $(MODULENAME)_HOOK_EXPORT
+ProxyDataFormat                          = $(MODULENAME)_HOOK_EXPORT_DATA $(MODULENAME)_HOOK_DATA_$(DATANAME)()
+
+; Prefix for fnTable$(ModuleName)Pointers and fnTable$(ModuleName)Names
+ProxyImplArrayNamesPrefix                = fnTable$(ModuleName)
+
+FunctionPtrTypeFormat                    = $(FunctionName)_fn_ptr_t
+GetOriginalFunctionPtrFuncTemplateName   = getOriginal$(ModuleName)FunctionPtr
+; Used for hook
+getOriginalFunctionFarprocPtrFuncName    = getOriginal$(ModuleName)FunctionFarprocPtr
+
+HookFunctionNameFormat                   = hook_$(FunctionName)
+
+; HookDll/ProxyDll 
+Dll                     = $(modulename)_hooks
+; Proxy ForwardTarget Dll/Dll with original function for hook
+ForwardTarget           = $(modulename)
+
+ForwardData             = true
+; ForwardData             = false
+ForwardEllipsis         = true
+;ForwardEllipsis         = false
+; ForwardList             = sqlite3_aggregate_count
+
+
+ProxyHelo               = $(MODULENAME)_HOOK_TRACE(("!!! Hook called: %s\n", "$(FunctionName)"))
+GenerateProxyHelo       = true
+
+; For proxy DLL, use LoadLibrary (UseLoadLibrary=true) to explicit load ForwardTarget DLL
+; For hook  DLL, use GetModuleHandle (UseLoadLibrary=false) to get handle of already loaded module
+;    In this case ForwardTarget DLL must be one of well known preloaded DLLs, or must be explicitly
+;    linked to the hook DLL
+UseLoadLibrary          = false
+
+
+CustomHandlerFormat     = $(MODULENAME)_HOOK_HANDLE_$(FUNCTIONNAME)
+GenerateCustomHandler   = true
+
+hookInitStartFormat     = DetourTransactionBegin(); DetourUpdateThread(GetCurrentThread())
+hookInitEndFormat       = DetourTransactionCommit()
+hookInitFormat          = $(FunctionPointersTable)[$(FunctionIndex)] = $(GetFunctionFarprocPtr)($(FunctionIndex)); DetourAttach(&(PVOID&)$(FunctionPointersTable)[$(FunctionIndex)], (PVOID)$(HookFunctionName))
+
+hookDeinitStartFormat   = DetourTransactionBegin(); DetourUpdateThread(GetCurrentThread())
+hookDeinitEndFormat     = DetourTransactionCommit()
+hookDeinitFormat        = DetourDetach(&(PVOID&)$(FunctionPointersTable)[$(FunctionIndex)], (PVOID)$(HookFunctionName))
+```
 
 После подготовки входных данных последовательно запускаем генерацию C++ файлов. Создаём главный файл DLL-модуля (см. пример `doc/samples/hook_dll_example.cpp`):
 ```
@@ -222,7 +302,6 @@ BOOL WINAPI DllMain(
     }
     return TRUE;  // Successful DLL_PROCESS_ATTACH.}
 }
-
 ```
 
 После произведённых действий получаются исходные тексты готового для компиляции модуля-DLL.
