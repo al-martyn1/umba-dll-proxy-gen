@@ -129,12 +129,12 @@ LPWSTR                       = lpwStr
 void SomeFunc(LPCWSTR lpcwStr, LPCWSTR lpcwStr2, LPCWSTR lpcwStr3);
 ```
 
-Затем создаём файл INI-файл PROXY_GENERATION_CONFIG_INI с параметрами генерации. Пример такого файла - `data\kernel32.ini`.
-Также можно посмотреть описания параметров в исходниках - `src/GenerationOptions.h`.
+Затем создаём файл INI-файл PROXY_GENERATION_CONFIG_INI с параметрами генерации.
+Описание параметров можно посмотреть в исходном файле `src/GenerationOptions.h`.
+Пример INI-файла с параметрами генерации (`data\kernel32.ini`):
 ```
 ; Also defines MODULENAME:KERNEL32 and modulename:kernel32
 SetMacroMulticase  = ModuleName:Kernel32
-
 
 ; Generate 
 ; #define KERNEL32_HOOK_CONFIG_OPT_NAME 0/1
@@ -174,7 +174,6 @@ ForwardEllipsis         = true
 ;ForwardEllipsis         = false
 ; ForwardList             = sqlite3_aggregate_count
 
-
 ProxyHelo               = $(MODULENAME)_HOOK_TRACE(("!!! Hook called: %s\n", "$(FunctionName)"))
 GenerateProxyHelo       = true
 
@@ -183,7 +182,6 @@ GenerateProxyHelo       = true
 ;    In this case ForwardTarget DLL must be one of well known preloaded DLLs, or must be explicitly
 ;    linked to the hook DLL
 UseLoadLibrary          = false
-
 
 CustomHandlerFormat     = $(MODULENAME)_HOOK_HANDLE_$(FUNCTIONNAME)
 GenerateCustomHandler   = true
@@ -236,7 +234,7 @@ hookDeinitFormat        = DetourDetach(&(PVOID&)$(FunctionPointersTable)[$(Funct
             } while(0)
 
 
-// !!! Add custom handlers here
+// !!! Add more custom handlers here
 
 
 #include "generated_hooks_kernel32\kernel32_hooks.h"

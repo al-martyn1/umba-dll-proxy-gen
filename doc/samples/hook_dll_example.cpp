@@ -35,7 +35,7 @@
             } while(0)
 
 
-// !!! Add custom handlers here
+// !!! Add more custom handlers here
 
 
 #include "generated_hooks_kernel32\kernel32_hooks.h"
