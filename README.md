@@ -37,6 +37,7 @@
 
 Прототипы функций могут быть в форме как собственно прототипов:
 >HANDLE CreateFile2(LPCWSTR lpFileName, DWORD dwDesiredAccess, DWORD dwShareMode, DWORD dwCreationDisposition, LPCREATEFILE2_EXTENDED_PARAMETERS pCreateExParams);
+
 так и в форме указателя на функцию:
 >HANDLE (WINAPI*CreateFile2)(LPCWSTR lpFileName, DWORD dwDesiredAccess, DWORD dwShareMode, DWORD dwCreationDisposition, LPCREATEFILE2_EXTENDED_PARAMETERS pCreateExParams);
 
@@ -46,7 +47,6 @@
 
 Имена параметров могут отсутствовать, в качестве параметров могут быть использованы указатели на функции, 
 которые, в свою очередь, также могут принимать указатели на функции:
-
 >int  (*sqlite3_create_function16)(sqlite3*,const void*,int,int,void*,void (*sqlite3_xFunc)(sqlite3_context*,int,sqlite3_value**),void (*sqlite3_xStep)(sqlite3_context*,int,sqlite3_value**),void (*sqlite3_xFinal)(sqlite3_context*));
 
 
