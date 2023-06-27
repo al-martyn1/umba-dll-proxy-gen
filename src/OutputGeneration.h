@@ -325,7 +325,12 @@ bool generateDef(StreamType &oss, ErrInfo &errInfo, const InputData &inputData, 
 
     for(const auto &me: inputData.moduleEntries)
     {
-        oss << "  " << me.entryName;
+        if (pgo.defFileIndent)
+        {
+            oss << std::string(pgo.defFileIndent, ' ');
+        }
+        oss << me.entryName;
+
         if (me.isForwardEntry())
         {
             std::string fwdTargetModule = me.otherModule;

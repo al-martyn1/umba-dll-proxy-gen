@@ -33,6 +33,7 @@ struct DllProxyGenerationOptions
 
     bool useLoadLibrary             = false           ; //!< Use LoadLibraryA or GetModuleHandleA
 
+    std::size_t defFileIndent       = 0               ; //!< Отступ имен в секции EXPORT генерируемого файла
     std::string functionIndexConstantNameFormat       ; //!< Формат константы индекса функции
     std::string ellipsisImplFormat                    ; //!< Формат вызова оригинальной функции (или какой-то замены) для функций с переменным числом аргументов
     std::string functionPtrTypeFormat                 ; //!< Формат указателя на функцию
@@ -220,6 +221,16 @@ bool parseDllProxyGenerationOptions( const std::string                &functions
             return false; // not valid
         };
 
+        auto fromStrToSize = [&](std::string s, std::size_t &res)
+        {
+            std::size_t pos = 0;
+            unsigned long ull = std::stoul(s, &pos);
+            if (pos!=s.size())
+                return false;
+            res = (std::size_t)ull;
+            return true;
+        };
+
         auto setInvalidMsg = [&](std::string n)
         {
             errInfo.errMsg = "invalid value for parameter '" + n + "'";
@@ -235,7 +246,8 @@ bool parseDllProxyGenerationOptions( const std::string                &functions
         errInfo.errMsg = "invalid value ";
 
         
-        bool boolVal = false;
+        bool          boolVal = false;
+        std::size_t   sizeVal = 0;
 
         auto checkSetParamString = [&](const std::string &testName, std::string &pgoParam) -> bool
         {
@@ -357,6 +369,18 @@ bool parseDllProxyGenerationOptions( const std::string                &functions
             pgo.useLoadLibrary = boolVal;
             continue;
         }
+
+        if (name=="DEFFILEINDENT") // defFileIndent
+        {
+            if (!fromStrToSize(value, sizeVal))
+            {
+                return setInvalidMsg("defFileIndent");
+            }
+
+            pgo.defFileIndent = sizeVal;
+            continue;
+        }
+        
 
         // if (name=="FUNCTIONINDEXCONSTANTNAMEFORMAT") // FunctionIndexConstantNameFormat
         if (PGO_INI_CHECKSET_PARAM_STRING(functionIndexConstantNameFormat))
