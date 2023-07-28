@@ -309,3 +309,102 @@ BOOL WINAPI DllMain(
 
 Для того, чтобы добавить своё поведение для перехватчиков, следует определить соответствующие макросы с реализацией кастомного перехвата (см. макрос KERNEL32_HOOK_HANDLE_CREATEFILE2 в листинге выше).
 
+
+
+## Примеры сгенерированных файлов
+
+### config
+```
+#define KERNEL32_HOOK_CONFIG_FORWARDDATA                 1
+#define KERNEL32_HOOK_CONFIG_FORWARDELLIPSIS             1
+#define KERNEL32_HOOK_CONFIG_GENERATECUSTOMHANDLER       1
+```
+
+### proxytypes
+```
+typedef HANDLE (WINAPI *CreateFile2_fn_ptr_t)(LPCWSTR, DWORD, DWORD, DWORD, LPCREATEFILE2_EXTENDED_PARAMETERS);
+```
+
+### fntables
+```
+FARPROC fnTableKernel32Pointers[1] = { 0 };
+
+const char* fnTableKernel32Names[1] =
+{ "CreateFile2"
+};
+```
+
+### fnindexes
+```
+#define KERNEL32_HOOK_FN_IDX_CREATEFILE2                                 0
+```
+
+### getprocptrfuncs
+```
+// INI: ProxyImplArrayNamesPrefix, FunctionPtrTypeFormat, GetOriginalFunctionPtrFuncTemplateName, getOriginalFunctionFarprocPtrFuncNameinline
+HMODULE getOriginalKernel32Hmodule()
+{
+    static HMODULE hMdod = GetModuleHandleA("kernel32.dll");
+    return hMdod;
+}
+
+inline
+FARPROC getOriginalKernel32FunctionFarprocPtr(unsigned idx)
+{
+    return GetProcAddress(getOriginalKernel32Hmodule(), fnTableKernel32Names[idx]);
+}
+
+template<typename FnPtrType>
+FnPtrType getOriginalKernel32FunctionPtr(unsigned idx)
+{
+    return reinterpret_cast<FnPtrType>(fnTableKernel32Pointers[idx]);
+}
+
+```
+
+### proxycode
+```
+SQLITE3_PROXY_EXPORT void* sqlite3_aggregate_context(sqlite3_context* pCtx, int nBytes)
+{
+    SQLITE3_PROXY_HELO_TRACE(("!!! Proxy called: %s\n", "sqlite3_aggregate_context"));
+    sqlite3_aggregate_context_fn_ptr_t orgFnPtr = getOriginalFunctionPtr<sqlite3_aggregate_context_fn_ptr_t>(SQLITE3_ORG_FN_IDX_SQLITE3_AGGREGATE_CONTEXT);
+    #if defined(SQLITE3_PROXY_HANDLE_SQLITE3_AGGREGATE_CONTEXT)
+        SQLITE3_PROXY_HANDLE_SQLITE3_AGGREGATE_CONTEXT();
+    #endif
+    return orgFnPtr(pCtx, nBytes);
+}
+```
+
+### hookcode
+```
+KERNEL32_HOOK_EXPORT HANDLE WINAPI hook_CreateFile2(LPCWSTR lpFileName, DWORD dwDesiredAccess, DWORD dwShareMode, DWORD dwCreationDisposition, LPCREATEFILE2_EXTENDED_PARAMETERS pCreateExParams)
+{
+    KERNEL32_HOOK_TRACE(("!!! Hook called: %s\n", "CreateFile2"));
+    CreateFile2_fn_ptr_t orgFnPtr = getOriginalKernel32FunctionPtr<CreateFile2_fn_ptr_t>(KERNEL32_HOOK_FN_IDX_CREATEFILE2);
+    #if defined(KERNEL32_HOOK_HANDLE_CREATEFILE2)
+        KERNEL32_HOOK_HANDLE_CREATEFILE2();
+    #endif
+    return orgFnPtr(lpFileName, dwDesiredAccess, dwShareMode, dwCreationDisposition, pCreateExParams);
+}
+```
+
+### hookinitcode
+```
+DetourTransactionBegin(); DetourUpdateThread(GetCurrentThread());
+
+fnTableKernel32Pointers[KERNEL32_HOOK_FN_IDX_CREATEFILE2] = getOriginalKernel32FunctionFarprocPtr(KERNEL32_HOOK_FN_IDX_CREATEFILE2); DetourAttach(&(PVOID&)fnTableKernel32Pointers[KERNEL32_HOOK_FN_IDX_CREATEFILE2], (PVOID)hook_CreateFile2);
+
+
+DetourTransactionCommit();
+```
+
+### hookdeinitcode
+```
+DetourTransactionBegin(); DetourUpdateThread(GetCurrentThread());
+
+DetourDetach(&(PVOID&)fnTableKernel32Pointers[KERNEL32_HOOK_FN_IDX_CREATEFILE2], (PVOID)hook_CreateFile2);
+
+
+DetourTransactionCommit();
+```
+
