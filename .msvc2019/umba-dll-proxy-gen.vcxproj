@@ -1,26 +1,23 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
-
   <PropertyGroup Label="Globals">
-    <ProjectGuid>{001634AE-5567-412E-ACEC-6EC488026C66}</ProjectGuid>
+    <ProjectGuid>{BE6616F9-2BCC-43F1-91F0-A20D5A096980}</ProjectGuid>
   </PropertyGroup>
-
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
-  <Import Project=".\props\umba_project_configurations.props" />
-  <Import Project=".\props\umba_msvcver.props" />
-  <Import Project=".\props\umba_target_console.props" />
-  <Import Project=".\props\umba_config_matrix_common.props" />
+  <Import Project="$(MSBuildThisFileDirectory)\..\.msvc\umba_project_configurations.props" />
+  <Import Project="$(MSBuildThisFileDirectory)\..\.msvc\umba_msvcver.props" />
+  <Import Project="$(MSBuildThisFileDirectory)\..\.msvc\umba_target_console.props" />
+  <Import Project="$(MSBuildThisFileDirectory)\..\.msvc\umba_config_matrix_common.props" />
   <!--Import Project=".\umba_config_matrix_qt.props" /-->
   <Import Project=".\umba_prjdirs.props" />
   <Import Project=".\umba_prjdefs.props" />
-
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <PropertyGroup>
     <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);$(ProjectDir)\..\src\encoding</IncludePath>
   </PropertyGroup>
   <ImportGroup Label="ExtensionSettings" />
   <ImportGroup Label="Shared" />
-  <ImportGroup Label="PropertySheets" >
+  <ImportGroup Label="PropertySheets">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
@@ -33,11 +30,11 @@
       <AdditionalOptions>/ignore:4099 %(AdditionalOptions)</AdditionalOptions>
     </Link>
   </ItemDefinitionGroup>
-
   <ItemGroup>
-    <ClCompile Include="..\src\$(TEST_NAME).cpp" />
-    <ClCompile Include="..\_libs\sfmt\umba_lout.cpp" />
+    <ClCompile Include="..\src\umba-dll-proxy-gen.cpp" />
   </ItemGroup>
+  <Import Project="$(UMBA_LOCAL_LIBS_ROOT)\umba\.msvc\sources.props" />
+  <Import Project="$(UMBA_LOCAL_LIBS_ROOT)\sfmt\.msvc\sources.props" />
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
