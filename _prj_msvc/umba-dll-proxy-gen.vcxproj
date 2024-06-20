@@ -32,8 +32,9 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="..\src\umba-dll-proxy-gen.cpp" />
-    <ClCompile Include="..\_libs\sfmt\umba_lout.cpp" />
   </ItemGroup>
+  <Import Project="$(UMBA_LOCAL_LIBS_ROOT)\umba\.msvc\sources.props" />
+  <Import Project="$(UMBA_LOCAL_LIBS_ROOT)\sfmt\.msvc\sources.props" />
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
